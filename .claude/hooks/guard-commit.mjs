@@ -1,12 +1,18 @@
 // PreToolUse(Bash): gate `git commit` on message format, stray CSVs and `npm run check:fast`.
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { deny, failClosed, projectDir, readInput, sh } from './lib.mjs'
+import {
+  COMMIT_IDENTITY,
+  deny,
+  failClosed,
+  hasAttribution,
+  projectDir,
+  readInput,
+  sh,
+} from './lib.mjs'
 
 const SUBJECT =
   /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([\w./-]+\))?!?: \S.{0,71}$/
-const ATTRIBUTION = /^\s*(co-authored-by|author|signed-off-by)\s*:/im
-const GENERATED = /generated with \[?claude|🤖/i
 const FORMAT_HELP =
   'Rewrite the commit message as Conventional Commits: `type(scope): subject` (types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert; subject <= 72 chars, imperative), then a blank line, then an optional body. Do NOT include Co-Authored-By, Author, Signed-off-by or "Generated with" lines. Then run git commit again.'
 
@@ -17,8 +23,12 @@ function unquote(s) {
 }
 
 // Returns the commit message, or null when it cannot be determined (e.g. --no-edit).
-function extractMessage(command) {
-  const heredoc = command.match(/<<-?\s*['"]?(\w+)['"]?\s*\n([\s\S]*?)\n\s*\1\b/)
+// Only the text from `git commit` onwards is considered, and a heredoc counts only when it
+// opens on the `git commit` line, so heredocs feeding other commands are ignored.
+function extractMessage(fullCommand) {
+  const start = fullCommand.search(/\bgit\s+(?:-C\s+\S+\s+)?commit\b/)
+  const command = fullCommand.slice(start)
+  const heredoc = command.match(/^[^\n]*<<-?\s*['"]?(\w+)['"]?[^\n]*\n([\s\S]*?)\n\s*\1\b/)
   if (heredoc) return heredoc[2]
   const parts = []
   for (const m of command.matchAll(
@@ -38,7 +48,7 @@ function extractMessage(command) {
 function checkMessage(message) {
   const lines = message.replace(/\r/g, '').split('\n')
   const subject = lines[0]?.trim() ?? ''
-  if (ATTRIBUTION.test(message) || GENERATED.test(message)) {
+  if (hasAttribution(message)) {
     return `Commit message contains an author/co-author/attribution line. ${FORMAT_HELP}`
   }
   if (!SUBJECT.test(subject)) {
@@ -54,6 +64,18 @@ failClosed('guard-commit', async () => {
   const { tool_input } = await readInput()
   const command = tool_input?.command ?? ''
   if (!/\bgit\s+(?:-C\s+\S+\s+)?commit\b/.test(command)) process.exit(0)
+
+  // Check flags only: quoted strings (e.g. the message) are blanked first.
+  const unquoted = command.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""')
+  if (/(?:^|\s)--author(?:=|\s)/.test(unquoted)) {
+    deny('Do not pass --author; commits use the configured maintainer identity.')
+  }
+  const author = sh('git', ['var', 'GIT_AUTHOR_IDENT']).trim()
+  if (!author.startsWith(`${COMMIT_IDENTITY.name} <${COMMIT_IDENTITY.email}>`)) {
+    deny(
+      `Commit author is "${author.replace(/ \d+ [+-]\d{4}$/, '')}", but commits must be authored as ${COMMIT_IDENTITY.name} <${COMMIT_IDENTITY.email}>. Run: git config user.name "${COMMIT_IDENTITY.name}" && git config user.email "${COMMIT_IDENTITY.email}" (and unset any GIT_AUTHOR_*/GIT_COMMITTER_* variables), then commit again.`,
+    )
+  }
 
   const message = extractMessage(command)
   if (message !== null) {

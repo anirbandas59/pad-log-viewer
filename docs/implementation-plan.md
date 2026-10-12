@@ -136,9 +136,10 @@ Hooks enforce the rules mechanically; they react to events inside a session but 
 
 | Event (matcher) | Runs in | What it does | Effect |
 | --- | --- | --- | --- |
-| `SessionStart` (`startup`, `resume`) | Both | Cloud: warn if the Node major version is not 24, then `npm ci` if `node_modules` is missing. Both: add context for Claude with branch, active milestone (from branch name) and any open review findings on its PR | Context only |
+| `SessionStart` (`startup`, `resume`) | Both | Cloud: set the maintainer git identity, warn if the Node major version is not 24, then `npm ci` if `node_modules` is missing. Both: add context for Claude with branch, active milestone (from branch name) and any open review findings on its PR | Context only |
 | `PreToolUse` (`Bash(git push *)`) | Both | Deny pushes to `main` or `dev` and any `--force` | Blocks |
-| `PreToolUse` (`Bash(git commit *)`) | Both | Deny if a staged `.csv` is outside `tests/fixtures/`; run `npm run check:fast` and deny on failure with the errors | Blocks |
+| `PreToolUse` (`Bash(git commit *)`) | Both | Deny a non-conventional or attributed message, an author other than the maintainer, or a staged `.csv` outside `tests/fixtures/`; run `npm run check:fast` and deny on failure with the errors | Blocks |
+| `PreToolUse` (`Bash(gh pr …)`, `gh api …/pulls`) | Both | Deny PR bodies, reviews and comments with attribution (Generated-with footer, session link, co-author lines) | Blocks |
 | `PreToolUse` (`Edit\|Write`) | Cloud | Deny edits to `.claude/**`, `CLAUDE.md` and `.github/workflows/**`, so the developer cannot weaken its own gates | Blocks |
 | `PostToolUse` (`Edit\|Write`) | Both | Prettier and ESLint `--fix` on the edited file; remaining lint errors returned to Claude as context | Feedback |
 | `Stop` | Cloud | If source changed since the last green run: `npm run check`; on failure exit 2 with a short summary so Claude keeps working. After 3 consecutive failures it lets Claude stop and report instead of looping | Prevents stopping |
