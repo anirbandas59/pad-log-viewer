@@ -8,6 +8,9 @@
 // cannot recognise must be passed with --terms. Names it learns automatically
 // (from paths, accounts, e-mails, hosts) are only tracked when 3+ characters
 // long, so pass shorter sensitive names (e.g. a 2-letter client code) with --terms.
+// Accounts are recognised as NetBIOS DOMAIN\user only: FQDN-style
+// (contoso.local\jdoe) and underscored (x_corp\jdoe) domains are not learned,
+// so pass those user and domain names with --terms.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { parseArgs } from 'node:util'

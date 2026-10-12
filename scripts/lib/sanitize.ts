@@ -32,7 +32,9 @@ const SEG = String.raw`[^\\/:*?"<>|\r\n]+`
 // DOMAIN\account in any case. The domain must not continue a path (no separator, drive
 // colon or word character before it) and the account must not be followed by another
 // segment, so C:\Users\jdoe\x is left to the path rules.
-const ACCOUNT = /(?<![\w\\/:.$-])([A-Za-z][A-Za-z0-9-]{1,14})\\([A-Za-z][\w.$-]*)(?![\\/])/g
+// The trailing lookahead repeats the account characters so a backtracked, shortened
+// match (Data\Invoice from Data\Invoices\a.pdf) cannot slip through.
+const ACCOUNT = /(?<![\w\\/:.$-])([A-Za-z][A-Za-z0-9-]{1,14})\\([A-Za-z][\w.$-]*)(?![\w.$\\/-])/g
 const USER_DIR = new RegExp(String.raw`(?<!\w)[A-Za-z]:[\\/]Users[\\/](${SEG})`, 'gi')
 // \\host\share or //host/share; a preceding colon means a URL scheme, handled by URL_RE.
 const UNC_HOST = new RegExp(String.raw`(?<![\\/:])(?:\\\\|//)(${SEG})[\\/]`, 'g')
@@ -243,7 +245,14 @@ class Sanitizer {
       if (Array.isArray(v)) return v.map(walk)
       if (v && typeof v === 'object') {
         // Keys can carry data too (dictionaries, data-table columns); generic keys pass unchanged.
-        return Object.fromEntries(Object.entries(v).map(([k, x]) => [this.text(k), walk(x)]))
+        // Distinct keys can map to the same pseudonym (Acme/acme), so suffix repeats to keep every entry.
+        const out: Record<string, unknown> = {}
+        for (const [k, x] of Object.entries(v)) {
+          let key = this.text(k)
+          for (let n = 2; key in out; n++) key = `${this.text(k)}_${n}`
+          out[key] = walk(x)
+        }
+        return out
       }
       return v
     }
