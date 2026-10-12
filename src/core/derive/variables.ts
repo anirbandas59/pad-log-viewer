@@ -1,0 +1,2 @@
+// Variable assignment index.
+export {}

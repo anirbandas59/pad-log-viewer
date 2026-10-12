@@ -1,0 +1,30 @@
+# dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# test output
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# secrets
+.env*
+
+# logs: real client data must never be committed; sanitized fixtures only
+*.csv
+!tests/fixtures/**/*.csv
+*.log
+
+# local Claude Code state
+.claude/.state/
+.claude/settings.local.json
+
+# editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.swp

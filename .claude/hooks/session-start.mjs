@@ -1,0 +1,60 @@
+// SessionStart(startup|resume): prepare the cloud VM and give Claude branch, milestone and review context.
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { context, isCloud, projectDir, sh } from './lib.mjs'
+
+const notes = []
+const run = (cmd, args, opts) => {
+  try {
+    return sh(cmd, args, { timeout: 30_000, ...opts }).trim()
+  } catch {
+    return ''
+  }
+}
+
+if (isCloud) {
+  const major = Number(process.versions.node.split('.')[0])
+  if (major !== 24)
+    notes.push(`WARNING: Node ${process.versions.node} is running; this project requires Node 24.`)
+  if (!existsSync(join(projectDir, 'node_modules'))) {
+    try {
+      sh('npm', ['ci', '--no-audit', '--no-fund'], { timeout: 600_000 })
+      notes.push('Installed dependencies with npm ci.')
+    } catch (err) {
+      notes.push(`npm ci failed: ${String(err.stderr ?? err).slice(-500)}`)
+    }
+  }
+}
+
+const branch = run('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+notes.push(`Current branch: ${branch || 'unknown'}.`)
+const milestone = branch.match(/^feature\/(m\d+[a-z]?)-/i)
+if (milestone) {
+  notes.push(
+    `Active milestone: ${milestone[1].toUpperCase()} (see the Milestones table in docs/implementation-plan.md).`,
+  )
+}
+if (branch === 'main' || branch === 'dev') {
+  notes.push(
+    'You are on a protected branch: never commit or push here; create feature/m<N>-<slug> from dev.',
+  )
+}
+
+if (milestone) {
+  const pr = run('gh', ['pr', 'view', '--json', 'number,url,labels,reviews'])
+  if (pr) {
+    try {
+      const data = JSON.parse(pr)
+      const labels = data.labels.map((l) => l.name)
+      notes.push(`Open PR #${data.number} (${data.url}), labels: ${labels.join(', ') || 'none'}.`)
+      const last = data.reviews.at(-1)
+      if (labels.includes('changes-requested') && last?.body) {
+        notes.push(`Latest review findings to address:\n${last.body.slice(0, 4000)}`)
+      }
+    } catch {
+      // gh output not JSON; skip review context.
+    }
+  }
+}
+
+context('SessionStart', notes.join('\n'))
