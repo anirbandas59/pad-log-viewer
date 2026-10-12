@@ -183,6 +183,38 @@ describe('sanitizeLog', () => {
       expect(out.csv).toMatch(/C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\.xlsx/)
     })
 
+    it('does not treat relative path segments as DOMAIN\\account', () => {
+      const out = sanitizeLog(
+        toCsv([
+          row({
+            'Log index': '1',
+            'Log message': 'Read Data\\Invoices\\a.pdf and Reports\\Q1\\x.xlsx',
+          }),
+        ]),
+        { fileName: 'x.csv' },
+      )
+      expect(out.counts.account).toBe(0)
+      expect(out.csv).toContain('Data\\Invoices\\a.pdf')
+    })
+
+    it('keeps every JSON key when rewritten keys would collide', () => {
+      const out = sanitizeLog(
+        toCsv([
+          row({
+            'Log index': '1',
+            Inputs: JSON.stringify({ T: param('Table', { Acme: 1, acme: 2, ACME: 3 }) }),
+          }),
+        ]),
+        { fileName: 'x.csv', terms: ['Acme'] },
+      )
+      const after = parseCsv(out.csv)
+      if (!after.ok) throw new Error('parse failed')
+      const value = parsePayload(after.rows[0]!.Inputs!).params[0]!.value
+      const table = JSON.parse(value) as Record<string, number>
+      expect(Object.values(table).sort()).toEqual([1, 2, 3])
+      expect(out.csv.toLowerCase()).not.toContain('acme')
+    })
+
     it('sanitizes forward-slash drive paths', () => {
       const out = expectClean({ 'Log message': 'Saved C:/Users/jdoe/Reports/q.xlsx' }, [
         'jdoe',
