@@ -46,3 +46,18 @@ export function failClosed(name, main) {
     process.exit(2)
   })
 }
+
+// Commits are authored as the maintainer, never as Claude.
+export const COMMIT_IDENTITY = { name: 'Anirban Das', email: 'anirbandas59@outlook.com' }
+
+// Lines that attribute work to an author or tool; banned in commits, PR bodies, reviews and comments.
+const ATTRIBUTION_PATTERNS = [
+  /^\s*(co-authored-by|author|signed-off-by)\s*:/im,
+  /generated (with|by) \[?claude/i,
+  /🤖/u,
+  /claude\.ai\/code\/session_/i,
+]
+
+export function hasAttribution(text) {
+  return ATTRIBUTION_PATTERNS.some((p) => p.test(text))
+}

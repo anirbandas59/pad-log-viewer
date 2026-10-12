@@ -1,7 +1,7 @@
 // SessionStart(startup|resume): prepare the cloud VM and give Claude branch, milestone and review context.
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { context, isCloud, projectDir, sh } from './lib.mjs'
+import { COMMIT_IDENTITY, context, isCloud, projectDir, sh } from './lib.mjs'
 
 const notes = []
 const run = (cmd, args, opts) => {
@@ -13,6 +13,9 @@ const run = (cmd, args, opts) => {
 }
 
 if (isCloud) {
+  // Cloud VMs default to a Claude git identity; commits must be authored as the maintainer.
+  run('git', ['config', 'user.name', COMMIT_IDENTITY.name])
+  run('git', ['config', 'user.email', COMMIT_IDENTITY.email])
   const major = Number(process.versions.node.split('.')[0])
   if (major !== 24)
     notes.push(`WARNING: Node ${process.versions.node} is running; this project requires Node 24.`)

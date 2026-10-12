@@ -14,6 +14,8 @@ Node 24 (`.nvmrc`). `npm ci`, `npm run dev`, `npm test`, `npm run check`.
 - One milestone per branch and PR; conventional commit messages.
 - Never push to `main` or `dev`; never force-push.
 - Commit messages: `type(scope): subject` (feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert; subject ≤ 72 chars), blank line, optional body. **Never** add `Co-Authored-By`, `Author`, `Signed-off-by` or "Generated with" lines. A hook blocks violations.
+- Commits are authored as `Anirban Das <anirbandas59@outlook.com>` (the SessionStart hook sets this in cloud sessions); never as Claude, never with `--author`.
+- PR bodies, reviews and comments carry no attribution: no "Generated with/by Claude Code" footer, robot emoji or `claude.ai/code/session_…` link. A hook blocks violations.
 - Log values render as text, never as HTML.
 
 ## Test-first rule
