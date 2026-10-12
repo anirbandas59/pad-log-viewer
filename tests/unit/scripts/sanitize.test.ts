@@ -215,6 +215,50 @@ describe('sanitizeLog', () => {
       expect(out.csv.toLowerCase()).not.toContain('acme')
     })
 
+    it('replaces a whole file:// address even when it contains spaces', () => {
+      expectClean({ 'Log message': 'Opened file:///C:/Users/jdoe/Client Acme/report.pdf today' }, [
+        'jdoe',
+        'acme',
+        'report',
+      ])
+    })
+
+    it('never rewrites the payload structure keys', () => {
+      const out = sanitizeLog(
+        toCsv([
+          row({ 'Log index': '1', Inputs: JSON.stringify({ F: param('Folder', 'x', 'NewVar') }) }),
+        ]),
+        { fileName: 'x.csv', terms: ['val', 'loc', 'abl'] },
+      )
+      const after = parseCsv(out.csv)
+      if (!after.ok) throw new Error('parse failed')
+      const p = parsePayload(after.rows[0]!.Inputs!).params[0]!
+      expect(p.value).toBe('x')
+      expect(p.label).toBe('Folder')
+      expect(p.variable).toBe('NewVar')
+    })
+
+    it('keeps keys named like Object.prototype members', () => {
+      const out = sanitizeLog(
+        toCsv([
+          row({
+            'Log index': '1',
+            Inputs:
+              '{"T":{"localizedName":"T","value":{"constructor":1,"toString":2,"__proto__":3},"variableName":null}}',
+          }),
+        ]),
+        { fileName: 'x.csv' },
+      )
+      const after = parseCsv(out.csv)
+      if (!after.ok) throw new Error('parse failed')
+      const value = parsePayload(after.rows[0]!.Inputs!).params[0]!.value
+      expect(Object.keys(JSON.parse(value) as object).sort()).toEqual([
+        '__proto__',
+        'constructor',
+        'toString',
+      ])
+    })
+
     it('sanitizes forward-slash drive paths', () => {
       const out = expectClean({ 'Log message': 'Saved C:/Users/jdoe/Reports/q.xlsx' }, [
         'jdoe',
