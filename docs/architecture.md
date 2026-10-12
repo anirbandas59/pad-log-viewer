@@ -166,6 +166,8 @@ The app accepts the PAD run-log CSV as exported from the Power Automate portal, 
 
 Missing required columns → the file is rejected with the list of missing headers. Unknown extra columns are kept and shown in the column picker.
 
+Headers match ignoring case, spaces, underscores and a BOM (`Log index` = `LogIndex` = `log_index`). Required: Start time, End time, Subflow, Log index, Action index, Action display name, Status, Inputs, Outputs. Optional (empty when absent): Module name, Action name, Module display name, Log level, Log message. `Subflow name` is accepted as an alias for Subflow. A file with no data rows is rejected as empty.
+
 ### File name
 
 Default format: `<flow-name>_<guid>_<export-timestamp>.csv`.
@@ -180,7 +182,8 @@ Default format: `<flow-name>_<guid>_<export-timestamp>.csv`.
 - **Quoting:** RFC 4180; embedded quotes are doubled (`""`).
 - **Encoding:** UTF-8 with optional BOM; non-ASCII (for example CJK file paths) must survive round-trip.
 - **Inputs/Outputs:** JSON inside a CSV field. Each parameter is `{ localizedName, value, variableName }`. Parse failure keeps the raw string and flags the row.
-- **Timestamps:** 7 fractional digits (.NET ticks). JavaScript `Date` keeps only milliseconds, so timestamps are parsed into BigInt ticks; durations under 1 ms stay accurate.
+- **Timestamps:** 7 fractional digits (.NET ticks). JavaScript `Date` keeps only milliseconds, so timestamps are parsed into BigInt ticks; durations under 1 ms stay accurate. Ticks count 100 ns since the Unix epoch, UTC. Accepted forms: ISO 8601 (`2026-10-01T09:15:30.1234567Z`, `T` or space, optional `Z`/`±hh:mm`, no zone = UTC) and US short (`10/1/2026 9:15:30.1234567 AM`); to be confirmed against real logs in M1b.
+- **Bad cells:** a row with an unreadable Log index is skipped; an unreadable Start time falls back to End time (or run start), an unreadable End time to Start time. Both are reported as per-row issues rather than rejecting the file.
 - **Truncation:** PAD shortens long values in the log, ending them with `...`. Such values are flagged and labelled "truncated by PAD" in the UI.
 - **Ordering:** rows are sorted by Log index, never by Action index.
 
@@ -201,7 +204,12 @@ Three in-memory types drive the UI (`LogRow`, `RunMeta`, `Annotation`); IndexedD
 | `startTicks`, `endTicks` | bigint | Start/End time |
 | `durationTicks` | bigint | derived: end − start |
 | `offsetTicks` | bigint | derived: start − run start |
-| `inputs`, `outputs` | `Param[]` | parsed JSON (`{ key, label, variable, value, truncated }`) |
+| `inputs`, `outputs` | `Param[]` | parsed JSON (`{ key, label, variable, value, truncated }`); `value` is text, non-strings stringified |
+| `startIso`, `endIso` | string | Start/End time as in the file; empty when unreadable |
+| `inputsRaw`, `outputsRaw` | string | Inputs/Outputs cell verbatim (Raw JSON view, malformed payloads) |
+| `payloadMalformed` | boolean | Inputs or Outputs is not valid JSON |
+| `truncated` | boolean | any value ends with PAD's `...` marker |
+| `extra` | `Record<string, string>` | unknown extra columns by header |
 | `effect` | string | derived one-line summary |
 | `depth` | number | derived block nesting level |
 | `isFailure` | boolean | derived from Status / Log level |
@@ -360,7 +368,7 @@ The app makes zero network requests, and real client logs never enter the reposi
 - **No network:** a Content-Security-Policy meta tag sets `default-src 'none'` with inline script and style allowed, so any accidental fetch fails. Playwright asserts zero network requests.
 - **No telemetry,** no analytics, no external fonts.
 - **Rendering:** all log values render as text, never as HTML, so a malicious value in a log cannot inject script.
-- **Repo hygiene:** the repo is private on github.com (anirbandas59/pad-log-viewer) and holds code and sanitized fixtures only. Raw logs contain client project ids, usernames and file paths; only output of `scripts/sanitize-log.ts` goes into `tests/fixtures/`. A pre-commit check rejects CSVs outside that folder.
+- **Repo hygiene:** the repo is private on github.com (anirbandas59/pad-log-viewer) and holds code and sanitized fixtures only. Raw logs contain client project ids, usernames and file paths; only output of `scripts/sanitize-log.ts` goes into `tests/fixtures/`. `npm run sanitize -- <log.csv> --terms "Client,Machine"` replaces GUIDs, paths, URLs, e-mails, `DOMAIN\account` names, user and host names learned from those, and the given terms with stable pseudonyms; it keeps timestamps, indexes, statuses, CSV shape and JSON validity, and refuses to write if a known secret survives. Free-text names it cannot recognise need `--terms`, so the output is always read before committing. A pre-commit check rejects CSVs outside that folder.
 - **Retention:** users control deletion; the reviewer guide reminds them that history holds client data.
 
 ### Performance budgets (10,000-row run, standard corporate laptop)
