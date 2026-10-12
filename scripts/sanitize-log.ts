@@ -10,7 +10,9 @@
 // long, so pass shorter sensitive names (e.g. a 2-letter client code) with --terms.
 // Accounts are recognised as NetBIOS DOMAIN\user only: FQDN-style
 // (contoso.local\jdoe) and underscored (x_corp\jdoe) domains are not learned,
-// so pass those user and domain names with --terms.
+// so pass those user and domain names with --terms. Literal escape text such as
+// Hello\nWorld is read as DOMAIN\account and replaced too: nothing leaks, but check
+// that the fixture still reads sensibly.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { parseArgs } from 'node:util'
