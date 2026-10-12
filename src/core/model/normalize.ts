@@ -28,7 +28,7 @@ const INTEGER = /^\s*-?\d+\s*$/
 /**
  * Turns parsed CSV rows into LogRows sorted by Log index. Rows with an
  * unreadable Log index are skipped; unreadable timestamps fall back (start →
- * run start, end → start) so the row stays visible. Both are reported in
+ * End time, end → start) so the row stays visible. Both are reported in
  * `issues`. Effect, depth and search text are derived later (M2).
  */
 export function normalizeRows(
