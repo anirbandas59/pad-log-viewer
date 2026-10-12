@@ -75,7 +75,7 @@ describe('parseCsv', () => {
     const text = toCsv([row({ 'Log index': '1' })]) + '\r\nonly,three,fields'
     const r = ok(text)
     expect(r.warnings.length).toBeGreaterThan(0)
-    expect(r.warnings[0]).toMatch(/line 3/i)
+    expect(r.warnings[0]).toMatch(/row 2/i)
   })
 
   it('parses the committed synthetic fixture', () => {
