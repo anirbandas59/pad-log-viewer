@@ -142,6 +142,18 @@ describe('sanitizeLog', () => {
     expect(out.csv).toContain('C:\\\\Users\\\\')
   })
 
+  it('sanitizes a UNC path that follows a path in free text', () => {
+    const csv = toCsv([
+      row({
+        'Log index': '1',
+        'Log message': 'Copied C:\\Temp\\a.txt; see \\\\fs02\\payroll\\x.pdf',
+      }),
+    ])
+    const out = sanitizeLog(csv, { fileName: 'x.csv' })
+    expect(out.csv.toLowerCase()).not.toContain('payroll')
+    expect(out.csv.toLowerCase()).not.toContain('fs02')
+  })
+
   it('is deterministic', () => {
     expect(sanitize().csv).toBe(sanitize().csv)
   })
