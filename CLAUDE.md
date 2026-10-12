@@ -34,6 +34,8 @@ For each acceptance criterion of the milestone: write the failing Vitest test in
 4. The reviewer (GitHub Actions) posts a review and relabels `approved` or `changes-requested`. On `changes-requested`, fix every **Blocking** finding, push, relabel `ready-for-review`.
 5. After 3 `REQUEST_CHANGES` rounds the PR is labelled `needs-human`; stop and wait.
 
+`main` is untouched until the v1 release merges `dev` into it. Until then `.github/workflows/claude-review.yml` must stay identical to its copy on `main`: `claude-code-action` skips the review when the two differ. The reviewer reads `.claude/` from the PR branch, so keep milestone branches up to date with `dev` (`git merge origin/dev`).
+
 Escalate (stop and ask in the PR/session) for: a dependency outside the Architecture tech stack, a data-model change, anything adding a network call, or changes to `.claude/`, `CLAUDE.md` or CI workflows (cloud sessions are blocked from editing those; propose them in the PR body under "Proposed config changes").
 
 ## Release checklist (dev → main, local session)
