@@ -27,6 +27,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+      # Review rules come from the base branch, so a PR cannot change how it is reviewed.
+      - name: Use reviewer config from the base branch
+        run: git checkout "origin/${{ github.base_ref }}" -- .claude CLAUDE.md
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc

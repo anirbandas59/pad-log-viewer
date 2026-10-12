@@ -28,7 +28,7 @@ For each acceptance criterion of the milestone: write the failing Vitest test in
 
 ## Milestone workflow
 
-1. Start from an up-to-date `dev`: `/start-milestone <N>` creates `feature/m<N>-<slug>`.
+1. Start from an up-to-date `dev`: `/start-milestone <N>`. Cloud sessions work on their assigned `claude/<task>-<id>` branch (the only branch they can push to); local sessions use `feature/m<N>-<slug>`. The PR title `feat(m<N>): …` identifies the milestone.
 2. Plan from the Milestones table in `docs/implementation-plan.md`; write failing tests; implement; `npm run check`.
 3. Open a PR into `dev` using `.github/pull_request_template.md`, label it `ready-for-review`, turn on Auto-fix.
 4. The reviewer (GitHub Actions) posts a review and relabels `approved` or `changes-requested`. On `changes-requested`, fix every **Blocking** finding, push, relabel `ready-for-review`.

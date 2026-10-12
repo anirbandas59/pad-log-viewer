@@ -1,6 +1,8 @@
 ## Milestone
 
-M<N> — <scope> (`feature/m<N>-<slug>`)
+M<N> — <scope>
+
+<!-- PR title must start with `feat(m<N>):`; it identifies the milestone for the reviewer. -->
 
 ## Acceptance criteria
 
