@@ -154,6 +154,81 @@ describe('sanitizeLog', () => {
     expect(out.csv.toLowerCase()).not.toContain('fs02')
   })
 
+  describe('closes leaks found in the M1 review', () => {
+    // Every value in `secrets` must be gone, and the residual check must come back empty.
+    function expectClean(fields: Omit<Parameters<typeof row>[0], 'Log index'>, secrets: string[]) {
+      const out = sanitizeLog(toCsv([row({ 'Log index': '1', ...fields })]), {
+        fileName: 'x.csv',
+      })
+      const haystack = out.csv.toLowerCase()
+      for (const s of secrets) expect(haystack, s).not.toContain(s.toLowerCase())
+      expect(out.residual).toEqual([])
+      return out
+    }
+
+    it('pseudonymises DOMAIN\\account whatever the case of the domain', () => {
+      const out = expectClean(
+        { 'Log message': 'Logged in as corp\\jdoe; owner Contoso\\JDoe; run by CORP\\svc_robot' },
+        ['corp', 'jdoe', 'contoso', 'svc_robot'],
+      )
+      expect(out.counts.account).toBe(3)
+    })
+
+    it('does not treat path segments as DOMAIN\\account', () => {
+      const out = expectClean({ 'Log message': 'Saved C:\\Users\\jdoe\\Reports\\q.xlsx' }, [
+        'jdoe',
+        'reports',
+      ])
+      expect(out.counts.account).toBe(0)
+      expect(out.csv).toMatch(/C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\.xlsx/)
+    })
+
+    it('sanitizes forward-slash drive paths', () => {
+      const out = expectClean({ 'Log message': 'Saved C:/Users/jdoe/Reports/q.xlsx' }, [
+        'jdoe',
+        'reports',
+      ])
+      expect(out.csv).toMatch(/C:\/Users\/[^/]+\/[^/]+\/[^/]+\.xlsx/)
+    })
+
+    it('sanitizes file:// URIs and //host/share paths', () => {
+      expectClean(
+        {
+          'Log message': 'Opened file://fs01/finance/x.pdf and file:///C:/Users/jdoe/y.pdf',
+          Inputs: JSON.stringify({ P: param('Folder', '//fs03/payroll/z.pdf') }),
+        },
+        ['fs01', 'finance', 'jdoe', 'fs03', 'payroll'],
+      )
+    })
+
+    it('learns and rewrites JSON object keys', () => {
+      const out = expectClean(
+        {
+          Inputs: JSON.stringify({
+            Table: param('Data table', {
+              'C:\\Users\\jdoe\\x.xlsx': { owner: 'jdoe@acme.com' },
+              rows: [{ 'corp\\mallory': 1 }],
+            }),
+          }),
+        },
+        ['jdoe', 'acme', 'mallory'],
+      )
+      const after = parseCsv(out.csv)
+      if (!after.ok) throw new Error('parse failed')
+      expect(parsePayload(after.rows[0]!.Inputs!).malformed).toBe(false)
+    })
+
+    it('learns OneDrive organisation and SharePoint site names', () => {
+      expectClean(
+        {
+          'Log message':
+            'C:\\Users\\bob\\OneDrive - Globex\\a.txt from https://globex.sharepoint.com/sites/Payroll/x; Globex Payroll approved',
+        },
+        ['globex', 'payroll'],
+      )
+    })
+  })
+
   it('is deterministic', () => {
     expect(sanitize().csv).toBe(sanitize().csv)
   })
