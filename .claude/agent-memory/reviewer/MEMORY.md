@@ -1,0 +1,1 @@
+- [Sanitizer probe checklist](sanitizer-probe-checklist.md) — leak cases to re-probe in scripts/lib/sanitize.ts (fwd-slash paths, lowercase DOMAIN\user, JSON keys)
