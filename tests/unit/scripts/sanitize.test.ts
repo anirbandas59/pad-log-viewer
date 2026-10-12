@@ -191,6 +191,16 @@ describe('sanitizeLog', () => {
       expect(out.csv).toMatch(/C:\/Users\/[^/]+\/[^/]+\/[^/]+\.xlsx/)
     })
 
+    it('keeps URL pseudonyms intact instead of reading "https:/" as a drive path', () => {
+      const out = expectClean(
+        { 'Log message': 'See https://example.com/a//b?x=1 and file:///C:/Users/jdoe/y.pdf' },
+        ['jdoe'],
+      )
+      expect(out.csv).toContain('https://host1.example.test/path1')
+      expect(out.csv).toContain('file://host2/path2')
+      expect(out.counts.path).toBe(0)
+    })
+
     it('sanitizes file:// URIs and //host/share paths', () => {
       expectClean(
         {

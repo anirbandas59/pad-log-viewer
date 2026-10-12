@@ -26,12 +26,18 @@ export interface SanitizeResult {
 
 const GUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g
-const URL_RE = /\bhttps?:\/\/[^\s"'<>]+/gi
+const URL_RE = /\b(?:https?|file):\/\/[^\s"'<>]*/gi
 // One path segment: no separator and no Windows-forbidden character.
 const SEG = String.raw`[^\\/:*?"<>|\r\n]+`
-const ACCOUNT = /\b([A-Z][A-Z0-9-]{1,14})\\([A-Za-z][\w.$-]*)/g
-const USER_DIR = new RegExp(String.raw`[A-Za-z]:\\Users\\(${SEG})`, 'gi')
-const UNC_HOST = new RegExp(String.raw`(?:^|[^\\])\\\\(${SEG})\\`, 'g')
+// DOMAIN\account in any case. The domain must not continue a path (no separator, drive
+// colon or word character before it) and the account must not be followed by another
+// segment, so C:\Users\jdoe\x is left to the path rules.
+const ACCOUNT = /(?<![\w\\/:.$-])([A-Za-z][A-Za-z0-9-]{1,14})\\([A-Za-z][\w.$-]*)(?![\\/])/g
+const USER_DIR = new RegExp(String.raw`(?<!\w)[A-Za-z]:[\\/]Users[\\/](${SEG})`, 'gi')
+// \\host\share or //host/share; a preceding colon means a URL scheme, handled by URL_RE.
+const UNC_HOST = new RegExp(String.raw`(?<![\\/:])(?:\\\\|//)(${SEG})[\\/]`, 'g')
+const ONEDRIVE_ORG = /OneDrive - ([^\\/:*?"<>|\r\n]+)/gi
+const SHAREPOINT_SITE = /\/(?:sites|teams)\/([^/?#\s"'<>]+)/gi
 // Host labels that identify nobody; learning them would also rewrite our own pseudonyms.
 const HOST_NOISE = new Set(['www', 'com', 'net', 'org', 'co', 'example', 'test', 'localhost'])
 
@@ -62,6 +68,14 @@ const GENERIC = new Set(
 )
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s)
+  } catch {
+    return s
+  }
+}
 
 class Pseudonyms {
   private maps = new Map<string, Map<string, string>>()
@@ -122,6 +136,7 @@ class Sanitizer {
     }
     for (const m of text.matchAll(USER_DIR)) add(m[1])
     for (const m of text.matchAll(UNC_HOST)) add(m[1])
+    for (const m of text.matchAll(ONEDRIVE_ORG)) add(m[1]?.trim())
     for (const m of text.matchAll(EMAIL)) {
       const [local, domain = ''] = m[0].split('@')
       add(local)
@@ -132,10 +147,13 @@ class Sanitizer {
       add(m[2])
     }
     for (const m of text.matchAll(URL_RE)) {
-      const host = /^https?:\/\/([^/:?#]+)/i.exec(m[0])?.[1] ?? ''
-      for (const label of host.split('.').slice(0, -1)) {
+      const [, scheme = '', host = ''] = /^(\w+):\/\/([^/:?#]*)/.exec(m[0]) ?? []
+      // Web hosts end in a public suffix; file:// hosts are bare machine names.
+      const labels = host.split('.')
+      for (const label of scheme.toLowerCase() === 'file' ? labels : labels.slice(0, -1)) {
         if (!HOST_NOISE.has(label.toLowerCase())) add(label)
       }
+      for (const site of m[0].matchAll(SHAREPOINT_SITE)) add(safeDecode(site[1]!))
     }
   }
 
@@ -151,8 +169,10 @@ class Sanitizer {
     return this.p.get('dir', core, (n) => `dir${n}`) + dots
   }
 
-  private path(match: string, sep: string): string {
+  private path(match: string, backslashSep: string): string {
     this.p.count('path')
+    // C:/x and //host/share use forward slashes; everything else uses the (maybe escaped) backslash.
+    const sep = /^(?:[A-Za-z]:\/|\/\/)/.test(match) ? '/' : backslashSep
     const unc = match.startsWith(sep + sep)
     const body = unc ? match.slice(sep.length * 2) : match
     const parts = body.split(sep)
@@ -179,7 +199,10 @@ class Sanitizer {
     })
     out = out.replace(URL_RE, (u) => {
       this.p.count('url')
-      return this.p.get('url', u, (n) => `https://host${n}.example.test/path${n}`)
+      const scheme = u.slice(0, u.indexOf(':')).toLowerCase()
+      return this.p.get('url', u, (n) =>
+        scheme === 'file' ? `file://host${n}/path${n}` : `https://host${n}.example.test/path${n}`,
+      )
     })
     out = out.replace(EMAIL, (e) => {
       this.p.count('email')
@@ -187,7 +210,11 @@ class Sanitizer {
     })
     // Greedy up to a Windows-forbidden character: in free text a path may run into the
     // following words, which then get pseudonymized too. Over-replacing is the safe side.
-    const pathRe = new RegExp(String.raw`(?:[A-Za-z]:${s}|${s}${s})[^/:*?"<>|\r\n]*`, 'g')
+    // Drive paths take either separator; `//host` is a UNC path unless a URL scheme precedes it.
+    const pathRe = new RegExp(
+      String.raw`(?:(?<!\w)[A-Za-z]:(?:${s}|/)|${s}${s}|(?<![:\w/])//)[^:*?"<>|\r\n]*`,
+      'g',
+    )
     out = out.replace(pathRe, (m) => this.path(m, sep))
     out = out.replace(ACCOUNT, (_m, _domain: string, user: string) => {
       this.p.count('account')
@@ -215,7 +242,8 @@ class Sanitizer {
       if (typeof v === 'string') return this.text(v)
       if (Array.isArray(v)) return v.map(walk)
       if (v && typeof v === 'object') {
-        return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]))
+        // Keys can carry data too (dictionaries, data-table columns); generic keys pass unchanged.
+        return Object.fromEntries(Object.entries(v).map(([k, x]) => [this.text(k), walk(x)]))
       }
       return v
     }
@@ -227,7 +255,10 @@ const JSON_COLUMNS = new Set(['inputs', 'outputs'])
 
 function stringsOf(value: unknown): string[] {
   if (typeof value === 'string') return [value]
-  if (value && typeof value === 'object') return Object.values(value).flatMap(stringsOf)
+  if (Array.isArray(value)) return value.flatMap(stringsOf)
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([k, v]) => [k, ...stringsOf(v)])
+  }
   return []
 }
 
