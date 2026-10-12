@@ -24,6 +24,9 @@
       "Bash(git push origin feature/*)",
       "Bash(git push -u origin feature/*)",
       "Bash(git push --set-upstream origin feature/*)",
+      "Bash(git push origin claude/*)",
+      "Bash(git push -u origin claude/*)",
+      "Bash(git push --set-upstream origin claude/*)",
       "Bash(gh pr *)",
       "Bash(gh label *)"
     ],

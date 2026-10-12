@@ -33,13 +33,14 @@ The loop repeats per milestone: you dispatch the milestone, the cloud developer 
 
 ## Branching and review protocol
 
-Agents only ever push to `feature/*` branches; `dev` and `main` change only through pull requests you merge.
+Agents only ever push to `claude/*` (cloud session) or `feature/*` branches; `dev` and `main` change only through pull requests you merge.
 
 | Branch | Purpose | Who writes to it |
 | --- | --- | --- |
 | `main` | Bootstrap commit, then tagged releases only | You, by merging the release PR from `dev` |
 | `dev` | Integration branch; always builds and passes tests | You, by merging approved milestone PRs |
-| `feature/m<N>-<slug>` | One milestone each, e.g. `feature/m1-csv-core` | Cloud developer session |
+| `claude/<task>-<id>` | One milestone each; the branch the cloud session is assigned (cloud sessions can push only to it). The PR title `feat(m<N>): …` identifies the milestone | Cloud developer session |
+| `feature/m<N>-<slug>` | One milestone each when built in a local session, e.g. `feature/m1-csv-core`; slugs in the Milestones table | Local developer session |
 
 Both `main` and `dev` are protected on GitHub: PR required, CI must pass, no force-push. A hook also blocks agents from pushing to them, so the rule holds even if protection is misconfigured.
 
@@ -125,7 +126,7 @@ This is the complete set: one subagent, two skills, and the workflow .github/wor
 
 **Definition of done for a milestone:** `npm run check` green, every acceptance criterion ticked in the PR body with evidence, `docs/architecture.md` updated if behaviour differs from it.
 
-**Permissions.** Allow `npm run *`, `npx vitest`, `npx playwright`, `git` read and commit commands, `git push` to `feature/*`, and `gh pr` / `gh label`. Deny force-push, push to `main` or `dev`, reading `.env*`, and reading `*.csv` outside `tests/fixtures/`.
+**Permissions.** Allow `npm run *`, `npx vitest`, `npx playwright`, `git` read and commit commands, `git push` to `feature/*` and `claude/*`, and `gh pr` / `gh label`. Deny force-push, push to `main` or `dev`, reading `.env*`, and reading `*.csv` outside `tests/fixtures/`.
 
 **Hand-off to the cloud.** A milestone starts with `claude --cloud "/start-milestone <N>"` run from the repo on an up-to-date `dev`. You run it after each merge into `dev`, one command per milestone.
 
@@ -150,7 +151,7 @@ The `PreToolUse` gates use `onFailure: "block"`, so a crashing or missing hook s
 
 Nine milestones, each one PR into `dev`, built bottom-up so every PR is testable on its own: logic first (M1–M3), UI next (M4–M7), shipping last (M8).
 
-| # | Branch | Scope | Key acceptance criteria |
+| # | Branch (local name; cloud uses `claude/*`) | Scope | Key acceptance criteria |
 | --- | --- | --- | --- |
 | M0 | `main` (local) | Bootstrap as above | `npm run check` green; repo, labels and protection in place |
 | M1 | `feature/m1-csv-core` | `fileName`, `parseCsv`, `schema`, `ticks`, `payload`, `normalize`; sanitizer script; synthetic fixtures incl. 10k rows | File-name parse handles underscores in flow names; sub-ms durations exact; truncated values flagged; malformed JSON keeps raw string; 10k rows parse + normalize < 1 s |
