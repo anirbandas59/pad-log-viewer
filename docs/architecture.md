@@ -236,7 +236,7 @@ A dropped file passes through seven synchronous stages in `core/`, then the UI r
 
 1. **Read** — `File.text()` reads the file; the BOM is stripped.
 2. **Identify** — `fileName.ts` extracts flow name, GUID and export timestamp; the GUID is checked against history for duplicates.
-3. **Parse** — Papa Parse in header mode; headers are validated against `schema.ts`.
+3. **Parse** — Papa Parse in array mode; `parseCsv.ts` maps the header row itself (so duplicate headers resolve predictably) and validates it against `schema.ts`.
 4. **Normalize** — each raw row becomes a `LogRow`: integers parsed, timestamps converted to BigInt ticks, Inputs/Outputs parsed to `Param[]` with a `truncated` flag.
 5. **Derive (per row)**
    1. Duration and offset from run start.

@@ -5,7 +5,12 @@
 // Writes the sanitized CSV under --out-dir with the run GUID replaced in its name,
 // prints replacement counts, and exits non-zero if any known secret survives.
 // Always read the output before committing it: free-text names the sanitizer
-// cannot recognise must be passed with --terms.
+// cannot recognise must be passed with --terms. Names it learns automatically
+// (from paths, accounts, e-mails, hosts) are only tracked when 3+ characters
+// long, so pass shorter sensitive names (e.g. a 2-letter client code) with --terms.
+// Accounts are recognised as NetBIOS DOMAIN\user only: FQDN-style
+// (contoso.local\jdoe) and underscored (x_corp\jdoe) domains are not learned,
+// so pass those user and domain names with --terms.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { parseArgs } from 'node:util'

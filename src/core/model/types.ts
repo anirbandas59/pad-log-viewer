@@ -39,7 +39,7 @@ export interface LogRow {
   /** Ticks (100 ns) since the Unix epoch, UTC. */
   startTicks: bigint
   endTicks: bigint
-  /** ISO 8601 with 7 fractional digits, as parsed; empty when the cell was not a timestamp. */
+  /** Timestamp cell text exactly as exported (not necessarily ISO 8601); empty when it was not a timestamp. */
   startIso: string
   endIso: string
   /** end − start. */
