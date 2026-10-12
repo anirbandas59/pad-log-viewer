@@ -96,7 +96,7 @@ export function syntheticRun(count: number): SyntheticRow[] {
       Inputs: JSON.stringify({
         FilePath: param('File path', `C:\\Data\\Batch ${i % 10}\\input_${i}.txt`),
         Encoding: param('Encoding', 'UTF-8'),
-        Payload: param('Payload', `{ "id": ${i}, "items": [${'"x", '.repeat(20)}"y"] }`),
+        Payload: param('Payload', `{ "id": ${i}, "items": [${'"x", '.repeat(6)}"y"] }`),
       }),
       Outputs: JSON.stringify({
         Result: param(
