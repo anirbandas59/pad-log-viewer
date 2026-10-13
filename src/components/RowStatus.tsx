@@ -14,7 +14,9 @@ export function RowStatus({ kind, label }: { kind: RowStatusKind; label?: string
   return (
     <span className={`inline-flex max-w-full min-w-0 items-center gap-1 ${className}`}>
       <Icon aria-hidden size={14} className="shrink-0" />
-      <span className="truncate">{label || kind}</span>
+      <span className="truncate" title={label || kind}>
+        {label || kind}
+      </span>
     </span>
   )
 }
