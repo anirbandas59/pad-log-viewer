@@ -107,7 +107,10 @@ type Row = Pick<LogRow, 'subflow' | 'actionIndex' | 'module' | 'action'> & {
   inputs?: readonly Param[]
 }
 
-/** The evaluated Condition a Conditionals.If logs as its input, if any. */
+/**
+ * The evaluated condition a Conditionals.If logs as its input, if any. PAD logs it under
+ * the JSON key `expression`; "Condition" is only its localizedName label, so match the key.
+ */
 function loggedCondition(row: Row): boolean | null {
   const value = row.inputs?.find((p) => p.key.toLowerCase() === 'expression')?.value.trim()
   if (value === undefined) return null
