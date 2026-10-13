@@ -1,5 +1,5 @@
 import { useStore } from '../../app/store.ts'
-import { LogList } from '../log/index.ts'
+import { LogView } from '../log/index.ts'
 import { OverviewTab } from '../overview/index.ts'
 import { RunHeader } from './RunHeader.tsx'
 import { RunTabs } from './RunTabs.tsx'
@@ -39,7 +39,7 @@ export function RunScreen({ id }: { id: string }) {
         ) : tab === 'overview' ? (
           <OverviewTab run={derived} />
         ) : tab === 'log' ? (
-          <LogList rows={derived.rows} />
+          <LogView run={derived} />
         ) : (
           <p className="text-sm text-muted">The {label} view is not built yet.</p>
         )}
