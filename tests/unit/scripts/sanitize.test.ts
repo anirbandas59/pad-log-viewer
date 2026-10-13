@@ -260,6 +260,66 @@ describe('sanitizeLog', () => {
       )
     })
 
+    // The next item can follow any character, not only a space (PAD quotes paths in errors).
+    // Each case runs as plain text and inside a malformed JSON cell, where backslashes are escaped.
+    describe.each([
+      {
+        name: 'a quoted drive path',
+        msg: String.raw`File 'C:\Temp\a b.txt' copied to 'D:\Clients\Acme\x'`,
+        secrets: ['clients', 'acme'],
+      },
+      {
+        name: 'a bracketed drive path',
+        msg: String.raw`Moved C:\Temp\a b.txt (D:\Clients\Acme\x)`,
+        secrets: ['clients', 'acme'],
+      },
+      {
+        name: 'a comma-joined drive path',
+        msg: String.raw`C:\Temp\a b.txt,D:\Clients\Acme\x`,
+        secrets: ['clients', 'acme'],
+      },
+      {
+        name: 'a bracketed URL after a file:// address',
+        msg: 'See file://fs01/a b.txt (https://acme.sharepoint.com/sites/Secret/x)',
+        secrets: ['fs01', 'acme', 'secret'],
+      },
+      {
+        name: 'a quoted UNC path',
+        msg: String.raw`C:\Temp\a b.txt '\\fs09\vault\y'`,
+        secrets: ['fs09', 'vault'],
+      },
+    ])('does not swallow $name', ({ msg, secrets }) => {
+      it('in plain text', () => {
+        expectClean({ 'Log message': msg }, secrets)
+      })
+
+      it('in a malformed JSON cell', () => {
+        const escaped = msg.replace(/\\/g, '\\\\')
+        const out = expectClean(
+          { Inputs: `{"P": {"value": "${escaped}", "variableName": "x"` },
+          secrets,
+        )
+        const after = parseCsv(out.csv)
+        if (!after.ok) throw new Error('parse failed')
+        expect(parsePayload(after.rows[0]!.Inputs!).malformed).toBe(true)
+      })
+    })
+
+    it('does not learn generic host labels such as api as sensitive names', () => {
+      const out = sanitizeLog(
+        toCsv([
+          row({
+            'Log index': '1',
+            Subflow: 'Call_API',
+            Inputs: JSON.stringify({ U: param('URL', 'https://api.acme.com/v1/x') }),
+          }),
+        ]),
+        { fileName: 'x.csv' },
+      )
+      expect(out.csv).toContain('Call_API')
+      expect(out.csv.toLowerCase()).not.toContain('acme')
+    })
+
     it('never rewrites the payload structure keys', () => {
       const out = sanitizeLog(
         toCsv([
