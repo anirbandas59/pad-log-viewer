@@ -35,6 +35,7 @@ For each acceptance criterion of the milestone: write the failing Vitest test in
 3. Open a PR into `dev` using `.github/pull_request_template.md`, label it `ready-for-review`, turn on Auto-fix.
 4. The reviewer (GitHub Actions) posts a review and relabels `approved` or `changes-requested`. On `changes-requested`, fix every **Blocking** finding, push, relabel `ready-for-review`.
 5. After 3 `REQUEST_CHANGES` rounds the PR is labelled `needs-human`; stop and wait.
+6. The maintainer merges only when **every** `review-gate` check entry on the head is green: it requires the reviewer's latest review to APPROVE the exact head commit (there is no branch protection on this plan). A dismissed approval turns its entry red.
 
 `main` is untouched until the v1 release merges `dev` into it. Until then `.github/workflows/claude-review.yml` must stay identical to its copy on `main`: `claude-code-action` skips the review when the two differ. The reviewer reads `.claude/` from the PR branch, so keep milestone branches up to date with `dev` (`git merge origin/dev`).
 
