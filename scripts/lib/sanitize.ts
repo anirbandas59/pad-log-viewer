@@ -26,9 +26,28 @@ export interface SanitizeResult {
 
 const GUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g
-// file:// addresses are often typed by hand with spaces, so they run to a Windows-forbidden
-// character like paths do (an optional drive colon is allowed); web URLs stop at whitespace.
-const URL_RE = /\bfile:\/\/(?:\/?[A-Za-z]:)?[^:*?"<>|\r\n]*|\bhttps?:\/\/[^\s"'<>]*/gi
+/**
+ * Rest of a path or file:// address. Names may contain spaces and punctuation, but no
+ * character is taken where the next item on the line starts (a drive, a URL scheme or a
+ * UNC path), whatever precedes it: quotes, brackets, commas. Otherwise the match would
+ * swallow that item's prefix and leave its remainder unrecognised. Stops at a
+ * Windows-forbidden character. `s` is the (maybe JSON-escaped) backslash separator.
+ */
+function pathRest(s: string): string {
+  const nextItem = [
+    String.raw`(?<!\w)[A-Za-z]:`,
+    String.raw`(?<![\w+.-])[A-Za-z][\w+.-]*:\/\/`,
+    String.raw`(?<![\w\\/])${s}${s}`,
+    String.raw`(?<![\w:/])\/\/`,
+  ].join('|')
+  return String.raw`(?:(?!${nextItem})[^:*?"<>|\r\n])*`
+}
+// file:// addresses are often typed by hand with spaces, so they follow the path rule
+// (optionally file://host/C: or file:///C:); web URLs stop at whitespace.
+const URL_RE = new RegExp(
+  String.raw`\bfile:\/\/(?:(?:[\w.-]*\/)?[A-Za-z]:)?${pathRest(String.raw`\\`)}|\bhttps?:\/\/[^\s"'<>]*`,
+  'gi',
+)
 // One path segment: no separator and no Windows-forbidden character.
 const SEG = String.raw`[^\\/:*?"<>|\r\n]+`
 // DOMAIN\account in any case. The domain must not continue a path (no separator, drive
@@ -42,8 +61,37 @@ const USER_DIR = new RegExp(String.raw`(?<!\w)[A-Za-z]:[\\/]Users[\\/](${SEG})`,
 const UNC_HOST = new RegExp(String.raw`(?<![\\/:])(?:\\\\|//)(${SEG})[\\/]`, 'g')
 const ONEDRIVE_ORG = /OneDrive - ([^\\/:*?"<>|\r\n]+)/gi
 const SHAREPOINT_SITE = /\/(?:sites|teams)\/([^/?#\s"'<>]+)/gi
-// Host labels that identify nobody; learning them would also rewrite our own pseudonyms.
-const HOST_NOISE = new Set(['www', 'com', 'net', 'org', 'co', 'example', 'test', 'localhost'])
+// Host labels that identify nobody. Learning them would also rewrite our own pseudonyms
+// and, as substring terms, mangle ordinary names (api would turn Call_API into Call_term1).
+const HOST_NOISE = new Set([
+  'www',
+  'com',
+  'net',
+  'org',
+  'co',
+  'example',
+  'test',
+  'localhost',
+  'api',
+  'app',
+  'apps',
+  'portal',
+  'login',
+  'auth',
+  'mail',
+  'cdn',
+  'static',
+  'dev',
+  'prod',
+  'sharepoint',
+  'onmicrosoft',
+  'microsoft',
+  'azurewebsites',
+  'blob',
+  'core',
+  'windows',
+  'cloud',
+])
 
 // Generic Windows folders kept as-is so fixtures stay readable.
 const GENERIC = new Set(
@@ -72,6 +120,18 @@ const GENERIC = new Set(
 )
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Wraps a replacer so trailing whitespace stays outside the replacement. A spaced match can
+ * end in "… to "; replacing the space too would glue the pseudonym to the next item
+ * (path1C:\…), and that drive is then no longer recognised.
+ */
+function keepTrailingSpace(replace: (match: string) => string): (match: string) => string {
+  return (match) => {
+    const core = match.trimEnd()
+    return core === '' ? match : replace(core) + match.slice(core.length)
+  }
+}
 
 function safeDecode(s: string): string {
   try {
@@ -201,13 +261,16 @@ class Sanitizer {
       this.p.secrets.add(g.toLowerCase())
       return this.p.get('guid', g, fakeGuid)
     })
-    out = out.replace(URL_RE, (u) => {
-      this.p.count('url')
-      const scheme = u.slice(0, u.indexOf(':')).toLowerCase()
-      return this.p.get('url', u, (n) =>
-        scheme === 'file' ? `file://host${n}/path${n}` : `https://host${n}.example.test/path${n}`,
-      )
-    })
+    out = out.replace(
+      URL_RE,
+      keepTrailingSpace((u) => {
+        this.p.count('url')
+        const scheme = u.slice(0, u.indexOf(':')).toLowerCase()
+        return this.p.get('url', u, (n) =>
+          scheme === 'file' ? `file://host${n}/path${n}` : `https://host${n}.example.test/path${n}`,
+        )
+      }),
+    )
     out = out.replace(EMAIL, (e) => {
       this.p.count('email')
       return this.p.get('email', e, (n) => `user${n}@example.test`)
@@ -216,10 +279,13 @@ class Sanitizer {
     // following words, which then get pseudonymized too. Over-replacing is the safe side.
     // Drive paths take either separator; `//host` is a UNC path unless a URL scheme precedes it.
     const pathRe = new RegExp(
-      String.raw`(?:(?<!\w)[A-Za-z]:(?:${s}|/)|${s}${s}|(?<![:\w/])//)[^:*?"<>|\r\n]*`,
+      String.raw`(?:(?<!\w)[A-Za-z]:(?:${s}|/)|${s}${s}|(?<![:\w/])//)${pathRest(s)}`,
       'g',
     )
-    out = out.replace(pathRe, (m) => this.path(m, sep))
+    out = out.replace(
+      pathRe,
+      keepTrailingSpace((m) => this.path(m, sep)),
+    )
     out = out.replace(ACCOUNT, (_m, _domain: string, user: string) => {
       this.p.count('account')
       return `DOMAIN${sep}` + this.p.get('account', user, (n) => `account${n}`)

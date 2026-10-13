@@ -223,6 +223,103 @@ describe('sanitizeLog', () => {
       ])
     })
 
+    // A spaced address or path must stop before the next scheme, drive or UNC path on the
+    // same line; otherwise it swallows that item's prefix and the rest leaks.
+    it('does not let a file:// address swallow a following URL', () => {
+      expectClean(
+        {
+          'Log message':
+            'See file://fs01/share/a b.txt and https://acme.sharepoint.com/sites/Secret/x',
+        },
+        ['fs01', 'acme', 'secret'],
+      )
+    })
+
+    it('does not let a file:// address swallow a following drive path', () => {
+      expectClean(
+        { 'Log message': 'Copy file:///C:/a/b.txt to C:\\Users\\jdoe\\Acme Clients\\Q3.xlsx' },
+        ['jdoe', 'acme', 'clients', 'q3.xlsx'],
+      )
+    })
+
+    it('sanitizes file://host/C:/ addresses', () => {
+      expectClean({ 'Log message': 'file://localhost/C:/Users/jdoe/Client Acme/r.pdf' }, [
+        'jdoe',
+        'acme',
+        'r.pdf',
+      ])
+    })
+
+    it('does not let a drive path swallow a following drive or UNC path', () => {
+      expectClean(
+        {
+          'Log message':
+            'Moved C:\\Users\\jdoe\\a to D:\\Clients\\Acme\\x and C:\\Temp\\a b.txt to \\\\fs09\\vault\\y',
+        },
+        ['jdoe', 'clients', 'acme', 'fs09', 'vault'],
+      )
+    })
+
+    // The next item can follow any character, not only a space (PAD quotes paths in errors).
+    // Each case runs as plain text and inside a malformed JSON cell, where backslashes are escaped.
+    describe.each([
+      {
+        name: 'a quoted drive path',
+        msg: String.raw`File 'C:\Temp\a b.txt' copied to 'D:\Clients\Acme\x'`,
+        secrets: ['clients', 'acme'],
+      },
+      {
+        name: 'a bracketed drive path',
+        msg: String.raw`Moved C:\Temp\a b.txt (D:\Clients\Acme\x)`,
+        secrets: ['clients', 'acme'],
+      },
+      {
+        name: 'a comma-joined drive path',
+        msg: String.raw`C:\Temp\a b.txt,D:\Clients\Acme\x`,
+        secrets: ['clients', 'acme'],
+      },
+      {
+        name: 'a bracketed URL after a file:// address',
+        msg: 'See file://fs01/a b.txt (https://acme.sharepoint.com/sites/Secret/x)',
+        secrets: ['fs01', 'acme', 'secret'],
+      },
+      {
+        name: 'a quoted UNC path',
+        msg: String.raw`C:\Temp\a b.txt '\\fs09\vault\y'`,
+        secrets: ['fs09', 'vault'],
+      },
+    ])('does not swallow $name', ({ msg, secrets }) => {
+      it('in plain text', () => {
+        expectClean({ 'Log message': msg }, secrets)
+      })
+
+      it('in a malformed JSON cell', () => {
+        const escaped = msg.replace(/\\/g, '\\\\')
+        const out = expectClean(
+          { Inputs: `{"P": {"value": "${escaped}", "variableName": "x"` },
+          secrets,
+        )
+        const after = parseCsv(out.csv)
+        if (!after.ok) throw new Error('parse failed')
+        expect(parsePayload(after.rows[0]!.Inputs!).malformed).toBe(true)
+      })
+    })
+
+    it('does not learn generic host labels such as api as sensitive names', () => {
+      const out = sanitizeLog(
+        toCsv([
+          row({
+            'Log index': '1',
+            Subflow: 'Call_API',
+            Inputs: JSON.stringify({ U: param('URL', 'https://api.acme.com/v1/x') }),
+          }),
+        ]),
+        { fileName: 'x.csv' },
+      )
+      expect(out.csv).toContain('Call_API')
+      expect(out.csv.toLowerCase()).not.toContain('acme')
+    })
+
     it('never rewrites the payload structure keys', () => {
       const out = sanitizeLog(
         toCsv([
