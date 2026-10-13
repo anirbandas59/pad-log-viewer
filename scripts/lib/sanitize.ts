@@ -26,9 +26,17 @@ export interface SanitizeResult {
 
 const GUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g
-// file:// addresses are often typed by hand with spaces, so they run to a Windows-forbidden
-// character like paths do (an optional drive colon is allowed); web URLs stop at whitespace.
-const URL_RE = /\bfile:\/\/(?:\/?[A-Za-z]:)?[^:*?"<>|\r\n]*|\bhttps?:\/\/[^\s"'<>]*/gi
+// Rest of a path or file:// address: names may contain spaces, but a space never starts
+// the next item on the line (a drive, a URL scheme or a UNC path), so a match cannot
+// swallow that item's prefix and leave the remainder unrecognised. Stops at a
+// Windows-forbidden character.
+const PATH_REST = String.raw`(?:[^:*?"<>|\r\n\s]|\s+(?!\s|[A-Za-z]:|[A-Za-z][\w+.-]*:\/\/|\\\\|\/\/))*`
+// file:// addresses are often typed by hand with spaces, so they follow the path rule
+// (optionally file://host/C: or file:///C:); web URLs stop at whitespace.
+const URL_RE = new RegExp(
+  String.raw`\bfile:\/\/(?:(?:[\w.-]*\/)?[A-Za-z]:)?${PATH_REST}|\bhttps?:\/\/[^\s"'<>]*`,
+  'gi',
+)
 // One path segment: no separator and no Windows-forbidden character.
 const SEG = String.raw`[^\\/:*?"<>|\r\n]+`
 // DOMAIN\account in any case. The domain must not continue a path (no separator, drive
@@ -216,7 +224,7 @@ class Sanitizer {
     // following words, which then get pseudonymized too. Over-replacing is the safe side.
     // Drive paths take either separator; `//host` is a UNC path unless a URL scheme precedes it.
     const pathRe = new RegExp(
-      String.raw`(?:(?<!\w)[A-Za-z]:(?:${s}|/)|${s}${s}|(?<![:\w/])//)[^:*?"<>|\r\n]*`,
+      String.raw`(?:(?<!\w)[A-Za-z]:(?:${s}|/)|${s}${s}|(?<![:\w/])//)${PATH_REST}`,
       'g',
     )
     out = out.replace(pathRe, (m) => this.path(m, sep))
