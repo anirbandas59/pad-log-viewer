@@ -16,7 +16,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:e2e": "node -e \"console.log('test:e2e is wired in M8')\"",
+    "test:e2e": "playwright test",
     "check:fast": "npm run typecheck && node scripts/check-fast.mjs",
     "check": "npm run typecheck && npm run lint && npm run test && npm run build && node scripts/check-size.mjs",
     "sanitize": "node scripts/sanitize-log.ts"
