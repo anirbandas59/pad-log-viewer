@@ -88,7 +88,6 @@ pad-log-viewer/
 ├─ .github/workflows/
 │  ├─ ci.yml               # lint, unit, e2e, bundle-size check on every PR
 │  └─ release.yml          # builds the single HTML and attaches it to a release
-├─ public/                 # favicon only (inlined at build)
 ├─ scripts/
 │  └─ sanitize-log.ts      # turns a real log into a safe test fixture
 ├─ src/
@@ -337,7 +336,7 @@ As built (M7):
 | Time | Visible | Relative to run start, `+mm:ss.fff`; hover shows absolute timestamp |
 | Duration | Visible | Bar-in-cell scaled to the slowest action; sub-ms shown as `<1 ms` or µs |
 | Subflow | Visible | Colour chip |
-| Action | Visible | Module icon + Action display name, indented by block depth |
+| Action | Visible | Action display name, indented by block depth (a module icon is not in v1) |
 | Effect | Visible | e.g. `txt_ApiPayload ← "{ 'FilePath': …"` |
 | Status | Visible | Icon + colour |
 | Message | Visible | Log message, truncated with tooltip |
