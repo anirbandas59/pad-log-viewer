@@ -38,6 +38,21 @@ describe('inlineHashes', () => {
 })
 
 describe('externalReferences', () => {
+  it('also reports srcset, poster, object data and form action, but not data-* attributes', () => {
+    const html = PAGE.replace(
+      '<title>',
+      '<img srcset="a.png 1x, b.png 2x"><video poster="p.jpg"></video>' +
+        '<object data="https://x.example/o.swf"></object><form action="/submit"></form>' +
+        '<div data-testid="run" data="data:,ok"></div><title>',
+    )
+    expect(externalReferences(html)).toEqual([
+      'a.png 1x, b.png 2x',
+      'p.jpg',
+      'https://x.example/o.swf',
+      '/submit',
+    ])
+  })
+
   it('accepts data: URIs and in-page links, and ignores text inside scripts and styles', () => {
     expect(externalReferences(PAGE)).toEqual([])
   })
