@@ -65,7 +65,7 @@ Every runtime library is bundled into the output HTML; nothing loads from a CDN 
 | UI framework | React 19 | Component model for tabs, drawer, tables |
 | Build | Vite + `vite-plugin-singlefile` | Inlines all JS/CSS into one HTML file |
 | CSV parsing | Papa Parse | RFC 4180 quoting, BOM handling, header mode |
-| Table | TanStack Table | Sorting, filtering, column visibility, headless |
+| Table | Column model in `core/derive/columns.ts`, rendered by hand over TanStack Virtual | Rows are always in Log index order, so there is no sorting to delegate; filtering is `filterRows` in core. TanStack Table (now v9, a new API) was not adopted in M6 |
 | Virtualization | TanStack Virtual | Renders only visible rows |
 | State | Zustand | Small store, no provider boilerplate |
 | Styling | Tailwind CSS with CSS-variable theme tokens | Light/dark themes, responsive utilities |
@@ -314,7 +314,6 @@ Opening a run re-derives its stored CSV (`deriveCsv`: parse, normalize, derive) 
 - First-failure card: the lowest-Log-index failure with its subflow, offset, status and Log message, or "No failures in this run". **Jump to row** opens the Execution log with that row selected and scrolled to the centre; each top-10 slowest action jumps the same way.
 - Time per subflow: one bar per subflow, largest first, from the run summary's wall-clock split, so the bars sum exactly to the run duration (`subflowBars`); bar colour from the 10-colour subflow palette (`subflowColor`, CSS tokens `--subflow-0` … `--subflow-9`).
 - Status breakdown (bars in status colours) and module usage (top 8, the rest folded into "Other"; `facetEntries`).
-- Until M6, the Execution log tab is a plain selectable list (Log index, subflow, action indented by depth, effect, status, duration); M6 replaces it with the virtualized table.
 
 | Tab | Answers | Content |
 | --- | --- | --- |
@@ -341,6 +340,14 @@ Opening a run re-derives its stored CSV (`deriveCsv`: parse, normalize, derive) 
 
 **Keyboard:** ↑/↓ moves the selected row, Enter opens the drawer, Esc closes it, `/` focuses search, `f` jumps to next failure.
 
+As built (M6):
+
+- Rows are virtualized with TanStack Virtual at fixed heights (36 px table rows, 88 px cards), so nothing is measured while scrolling. The grid (`role="grid"`, `aria-rowcount` = rows shown) holds a sticky header row; columns come from `LOG_COLUMNS` and keep their grid tracks, and the table scrolls sideways inside its own box when the columns are wider than it. Time is `formatOffset` (`+mm:ss.fff`, `+h:mm:ss.fff` past an hour) with the exported timestamp as a tooltip; the Duration bar is scaled to the run's slowest action. The module icon in the Action column is not built yet.
+- Filtering is `filterRows` in core: search terms are split on whitespace and all must occur in the row's `searchText`; facets OR within a facet and AND across facets; Errors only keeps `isFailure` rows; Hide noise drops `Variables.SetVariable`/`Assign` and `Conditionals.If`/`Else`/`ElseIf` (`isNoise`). Status chips use `rowStatusKind`: Failed (`isFailure`), Warning (Log level contains "warn"), Succeeded, Unknown. Subflow and module chips are checkbox lists behind "Subflows" and "Modules" buttons, with row counts. Search is debounced 150 ms. Each filter change is timed from the store update to the table's commit as the `pad:filter` performance measure (budget < 100 ms).
+- The count reads "N of M rows"; the active-filter count is the search (1), each chosen facet value and each toggle. "Clear filters" also clears the search box.
+- Column visibility is saved to the `settings` store under `logColumns` (best effort, read at start-up with `readColumnVisibility`); the Action column cannot be hidden.
+- Selection lives in the store. `jumpToRow` also bumps a jump counter, so jumping to the row that is already selected still scrolls it to the centre. ↑/↓ (`stepSelection`) and `f` (`nextFailure`, wrapping round) work over the filtered rows; ↑/↓ and Enter apply when the table has focus, `/`, `f` and Esc anywhere on the tab except in a text field or while a dialog is open.
+
 ### Row detail drawer
 
 - Title: Action display name, status, duration, Log index.
@@ -349,6 +356,8 @@ Opening a run re-derives its stored CSV (`deriveCsv`: parse, normalize, derive) 
 - Copy buttons per value and "Copy row as text" for pasting into tickets or Teams.
 - Bookmark toggle and a note field, saved to history.
 - Previous / Next buttons to step through rows without closing.
+
+As built (M6): parameters list Parameter · Variable · Value with a copy button each; a payload that is not JSON is shown as its raw text. "Raw JSON" swaps both tables for `JsonTree` (`role="tree"`, branches open two levels deep). "Copy row as text" uses `rowAsText` and the Clipboard API, falling back to `execCommand('copy')`, with a "Copied" status message. Previous / Next step through the filtered rows. Bookmarks and notes are M7.
 
 ### Visual system
 
@@ -365,6 +374,8 @@ Opening a run re-derives its stored CSV (`deriveCsv`: parse, normalize, derive) 
 | ≥ 1280 px | Table with drawer docked on the right (40% width) |
 | 768–1279 px | Drawer slides over the table; fewer default columns |
 | < 768 px | Rows render as cards (action, status, duration, effect); drawer is full screen |
+
+As built (M6): the app header is sticky (3.5 rem) and the drawer opens below it, so the theme switch stays reachable; the run view widens to 110 rem. At 768–1279 px the drawer is a fixed panel up to 32 rem wide over the table; the table keeps the same default columns and scrolls sideways inside its box instead of dropping columns.
 
 The primary target is a 1366–1920 px laptop or monitor; small screens are functional, not optimised.
 
