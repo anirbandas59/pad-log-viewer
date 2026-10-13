@@ -38,9 +38,15 @@ function offending(text: string): Record<string, string[]> {
   )
   add(
     'user folder',
-    [...text.matchAll(/Users\\+([^\\"]+)/g)]
+    [...text.matchAll(/Users[\\/]+([^\\/"]+)/g)]
       .map((m) => m[1]!)
       .filter((u) => !/^(?:dir|term|file)\d+$/.test(u) && !u.startsWith('<<')),
+  )
+  add(
+    'OneDrive org',
+    [...text.matchAll(/OneDrive - ([^\\/"]+)/g)]
+      .map((m) => m[1]!.trim())
+      .filter((o) => !/^(?:dir|term)\d+$/.test(o)),
   )
   add(
     'long digit run',
