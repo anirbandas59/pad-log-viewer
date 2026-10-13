@@ -84,6 +84,7 @@ describe('computeDepths', () => {
     // Real pattern: For each { Block { If (false) ... Continue ... } }, Block End never logged.
     const depths = computeDepths([
       r('s', 1, 'Conditionals.If'),
+      r('s', 2, 'Text.SplitText'),
       r('s', 3, 'Loops.Foreach'),
       r('s', 4, 'FlowControl.Block'),
       r('s', 5, 'System.IfProcessAction'),
@@ -96,7 +97,32 @@ describe('computeDepths', () => {
       r('s', 13, 'FlowControl.End'),
       r('s', 14, 'FlowControl.End'),
     ])
-    expect(depths).toEqual([0, 1, 2, 3, 3, 1, 1, 2, 3, 3, 1, 0])
+    expect(depths).toEqual([0, 1, 1, 2, 3, 3, 1, 1, 2, 3, 3, 1, 0])
+  })
+
+  const cond = (line: number, value: string) => ({
+    ...r('main', line, 'Conditionals.If'),
+    inputs: [{ key: 'expression', label: 'Condition', variable: null, value, truncated: false }],
+  })
+
+  it('keeps a true If open when its first body line is a comment (not logged)', () => {
+    const depths = computeDepths([
+      cond(1, 'True'),
+      r('main', 3, 'Variables.Assign'),
+      r('main', 4, 'FlowControl.End'),
+      r('main', 5, 'Variables.Assign'),
+    ])
+    expect(depths).toEqual([0, 1, 0, 0])
+  })
+
+  it('closes a false If before the next executed line', () => {
+    const depths = computeDepths([
+      cond(1, 'False'),
+      r('main', 5, 'Variables.Assign'),
+      r('main', 6, 'Conditionals.If'),
+      r('main', 7, 'Variables.Assign'),
+    ])
+    expect(depths).toEqual([0, 0, 0, 1])
   })
 
   it('works out each subflow separately, so an unclosed block cannot leak', () => {

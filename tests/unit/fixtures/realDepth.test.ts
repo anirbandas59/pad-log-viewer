@@ -9,11 +9,16 @@ import { REAL_FIXTURE, loadRun } from '../helpers/fixtures.ts'
 const run = loadRun(REAL_FIXTURE)
 const depths = computeDepths(run.rows)
 
+/** [line, depth] for each line executed in the subflow's first call, in source order. */
 function firstVisit(subflow: string) {
   const start = run.rows.findIndex((r) => r.subflow === subflow)
-  let end = start
-  while (end < run.rows.length && run.rows[end]!.subflow === subflow) end++
-  return run.rows.slice(start, end).map((r, i) => [r.actionIndex, depths[start + i]])
+  const seen = new Map<number, number>()
+  for (let i = start; i < run.rows.length && run.rows[i]!.subflow === subflow; i++) {
+    const line = run.rows[i]!.actionIndex
+    if (seen.has(line)) expect(depths[i], `line ${line} on a later pass`).toBe(seen.get(line))
+    else seen.set(line, depths[i]!)
+  }
+  return [...seen].sort((a, b) => a[0] - b[0])
 }
 
 describe('block depth on the real export', () => {
@@ -24,7 +29,7 @@ describe('block depth on the real export', () => {
 
   it('nests For each > Block > If, closing them at the End after Next loop', () => {
     // If 1 { Split 2; For each 3 { Block 4 { If 5 (false) ... Next loop 9 } End 13 } End 14 }
-    expect(firstVisit('Close Application').slice(0, 8)).toEqual([
+    expect(firstVisit('Close Application')).toEqual([
       [1, 0],
       [2, 1],
       [3, 1],
@@ -32,9 +37,8 @@ describe('block depth on the real export', () => {
       [5, 3],
       [9, 3],
       [13, 1],
-      [3, 1],
+      [14, 0],
     ])
-    expect(firstVisit('Close Application').at(-1)).toEqual([14, 0])
   })
 
   it('indents a loop body inside an outer block on every pass', () => {
