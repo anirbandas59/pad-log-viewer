@@ -77,6 +77,12 @@ describe('effectSummary', () => {
     )
   })
 
+  it('shows a Block by its name, not as a condition', () => {
+    expect(effectSummary(row('FlowControl', 'Block', [p('name', 'Name', 'Get Email block')]))).toBe(
+      'Name: Get Email block',
+    )
+  })
+
   it('shows a Case as its operator and value', () => {
     const e = effectSummary(
       row('Conditionals', 'Case', [

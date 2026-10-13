@@ -18,7 +18,7 @@ function literal(value: string): string {
 
 /**
  * `variable ← value` for an action that writes a variable, `Condition = value` for a
- * conditional, the operator and value for a Case, otherwise the first input.
+ * conditional or Switch, the operator and value for a Case, otherwise the first input.
  */
 export function effectSummary(
   row: Pick<LogRow, 'module' | 'action' | 'inputs' | 'outputs'>,
@@ -31,6 +31,8 @@ export function effectSummary(
   const kind = classifyAction(row.module, row.action, rules)
   if (kind === 'middle') return oneLine(row.inputs.map((p) => p.value).join(' '))
   if (!first) return ''
-  if (kind === 'conditional' || kind === 'block') return `${first.label} = ${oneLine(first.value)}`
+  // A Switch tests its expression like a condition; a Block's input is only its name.
+  const tests = kind === 'conditional' || (kind === 'block' && /^switch$/i.test(row.action))
+  if (tests) return `${first.label} = ${oneLine(first.value)}`
   return `${first.label}: ${oneLine(first.value)}`
 }
