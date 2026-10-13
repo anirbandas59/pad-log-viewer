@@ -223,6 +223,43 @@ describe('sanitizeLog', () => {
       ])
     })
 
+    // A spaced address or path must stop before the next scheme, drive or UNC path on the
+    // same line; otherwise it swallows that item's prefix and the rest leaks.
+    it('does not let a file:// address swallow a following URL', () => {
+      expectClean(
+        {
+          'Log message':
+            'See file://fs01/share/a b.txt and https://acme.sharepoint.com/sites/Secret/x',
+        },
+        ['fs01', 'acme', 'secret'],
+      )
+    })
+
+    it('does not let a file:// address swallow a following drive path', () => {
+      expectClean(
+        { 'Log message': 'Copy file:///C:/a/b.txt to C:\\Users\\jdoe\\Acme Clients\\Q3.xlsx' },
+        ['jdoe', 'acme', 'clients', 'q3.xlsx'],
+      )
+    })
+
+    it('sanitizes file://host/C:/ addresses', () => {
+      expectClean({ 'Log message': 'file://localhost/C:/Users/jdoe/Client Acme/r.pdf' }, [
+        'jdoe',
+        'acme',
+        'r.pdf',
+      ])
+    })
+
+    it('does not let a drive path swallow a following drive or UNC path', () => {
+      expectClean(
+        {
+          'Log message':
+            'Moved C:\\Users\\jdoe\\a to D:\\Clients\\Acme\\x and C:\\Temp\\a b.txt to \\\\fs09\\vault\\y',
+        },
+        ['jdoe', 'clients', 'acme', 'fs09', 'vault'],
+      )
+    })
+
     it('never rewrites the payload structure keys', () => {
       const out = sanitizeLog(
         toCsv([
