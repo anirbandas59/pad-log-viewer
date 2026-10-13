@@ -2,10 +2,13 @@ name: Review gate
 
 # Branch protection is unavailable on this plan, so nothing blocks a merge. This check goes red
 # unless the reviewer approved the exact commit being merged, so an unapproved PR shows a red ✗
-# next to the merge button.
+# next to the merge button. It reads labels, head and reviews live from the API (not from the
+# event payload), so re-running an old run judges the current state.
 on:
   pull_request:
     types: [opened, reopened, synchronize, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, dismissed]
 
 permissions:
   pull-requests: read
@@ -24,28 +27,57 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          echo "Labels: ${LABELS:-none}"
-          if [[ ",$LABELS," != *",approved,"* ]]; then
-            echo "::error::Not approved: the PR does not have the 'approved' label. Do not merge."
-            exit 1
-          fi
-          # The newest review by the Claude reviewer must approve the head commit, not an older one.
-          latest=$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
-            --jq '[.[] | select(.user.login == "claude[bot]")] | last | "\(.state) \(.commit_id)"')
-          echo "Latest reviewer review: ${latest:-none}"
-          if [[ "$latest" != "APPROVED $HEAD_SHA" && "$latest" != "COMMENTED $HEAD_SHA" ]]; then
-            echo "::error::The reviewer has not approved the head commit $HEAD_SHA. Do not merge."
-            exit 1
-          fi
-          if [[ "$latest" == "COMMENTED $HEAD_SHA" ]]; then
-            body=$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
-              --jq '[.[] | select(.user.login == "claude[bot]")] | last | .body')
-            if ! grep -Eq '^Verdict: APPROVE\s*$' <<<"$body"; then
-              echo "::error::The reviewer's latest review of $HEAD_SHA is not an APPROVE verdict. Do not merge."
-              exit 1
-            fi
-          fi
-          echo "Approved by the reviewer at $HEAD_SHA."
+          node --input-type=module <<'EOF'
+          const { GH_TOKEN, REPO, PR, EVENT_HEAD_SHA } = process.env
+          const REVIEWER = 'claude[bot]'
+
+          // Fetches every page of a list endpoint and merges them into one array.
+          async function all(path) {
+            const items = []
+            for (let page = 1; ; page++) {
+              const res = await fetch(`https://api.github.com/repos/${REPO}/${path}?per_page=100&page=${page}`, {
+                headers: { authorization: `Bearer ${GH_TOKEN}`, accept: 'application/vnd.github+json' },
+              })
+              if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`)
+              const batch = await res.json()
+              items.push(...batch)
+              if (batch.length < 100) return items
+            }
+          }
+          async function one(path) {
+            const res = await fetch(`https://api.github.com/repos/${REPO}/${path}`, {
+              headers: { authorization: `Bearer ${GH_TOKEN}`, accept: 'application/vnd.github+json' },
+            })
+            if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`)
+            return res.json()
+          }
+          function fail(message) {
+            console.log(`::error::${message} Do not merge.`)
+            process.exit(1)
+          }
+
+          const pr = await one(`pulls/${PR}`)
+          const head = pr.head.sha
+          if (EVENT_HEAD_SHA && EVENT_HEAD_SHA !== head) {
+            fail(`This run is for ${EVENT_HEAD_SHA}, but the PR head is now ${head}; see the newer run.`)
+          }
+          const labels = pr.labels.map((l) => l.name)
+          console.log(`Head: ${head}\nLabels: ${labels.join(', ') || 'none'}`)
+          if (!labels.includes('approved')) fail("The PR does not have the 'approved' label.")
+
+          const reviews = (await all(`pulls/${PR}/reviews`)).filter((r) => r.user?.login === REVIEWER)
+          const latest = reviews.at(-1)
+          console.log(`Latest ${REVIEWER} review: ${latest ? `${latest.state} at ${latest.commit_id}` : 'none'}`)
+          if (!latest) fail(`${REVIEWER} has not reviewed this PR.`)
+          if (latest.commit_id !== head) fail(`${REVIEWER}'s latest review is of ${latest.commit_id}, not the head ${head}.`)
+          if (latest.state === 'COMMENTED') {
+            // review-pr falls back to a comment review; only its final line carries the verdict.
+            const last = (latest.body ?? '').replace(/\r/g, '').split('\n').filter((l) => l.trim()).at(-1) ?? ''
+            if (!/^Verdict:\s+APPROVE\s*$/.test(last)) fail(`The latest review's final line is not "Verdict: APPROVE".`)
+          } else if (latest.state !== 'APPROVED') {
+            fail(`${REVIEWER}'s latest review is ${latest.state}.`)
+          }
+          console.log(`Approved by ${REVIEWER} at ${head}.`)
+          EOF
