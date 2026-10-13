@@ -29,7 +29,7 @@ export function MarkIcons({ mark }: { mark?: RowMark }) {
 
 export function SubflowChip({ subflow }: { subflow: string }) {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5" title={subflow}>
+    <span className="flex w-full max-w-full min-w-0 items-center gap-1.5" title={subflow}>
       <span
         aria-hidden
         className="h-2.5 w-2.5 shrink-0 rounded-sm"
