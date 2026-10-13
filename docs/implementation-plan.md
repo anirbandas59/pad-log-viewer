@@ -179,7 +179,7 @@ Nine milestones, each one PR into `dev`, built bottom-up so every PR is testable
 | 5 | Payload shape | Pass | 0 malformed, 159 truncated, `{ localizedName, value, variableName }` (`realExport.test.ts`) |
 | 6 | Parse + normalize + derive under 1 s; storage 2–5 MB per 10k rows | Pass | single cold run in a fresh process: 33–46 ms for the real export, 229–264 ms for 10,000 synthetic rows; raw CSV 483 KB per 1,235 rows ≈ 3.9 MB per 10,000 |
 
-Not validated — **needs the maintainer's sign-off before the v1 release PR**: a **failed-run** real export (no real log with failures was available; failure handling is covered by synthetic fixtures and browser tests) and a **real 10,000-row** log (budget checked on synthetic 10,000 rows).
+Still open before the v1 release PR: a **failed-run** real export — the maintainer is providing one (2026-10-13); it gets the same sanitize, review, leak-guard and facts tests as the first. A **real 10,000-row** log is **waived for v1 by the maintainer (2026-10-13)**: the budget is checked on 10,000 synthetic rows (229–264 ms cold).
 
 Milestones run one at a time: each starts from the `dev` that contains the previous merge, and parallel cloud sessions would share your plan's usage limits anyway.
 
