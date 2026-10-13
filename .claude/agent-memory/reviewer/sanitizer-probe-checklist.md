@@ -11,6 +11,7 @@ When reviewing anything that touches the fixture sanitizer (scripts/lib/sanitize
 - `DOMAIN\user` where the domain is lower/mixed case (`whoami` prints `corp\jdoe`); ACCOUNT regex was uppercase-only
 - JSON object keys (only values are learned and rewritten)
 - OneDrive org folder `OneDrive - <Org>` not learned as a term
+- greedy path/`file://` matching that crosses spaces must stop before the next drive, scheme or UNC path on the line (PR #8 regression: `file://a b.txt and https://acme…` leaked `acme`); probe two items on one line
 - regression risk from the fix: `https://…` must not be read as a forward-slash drive path (`s:/`); URL pseudonyms must stay `https://hostN.example.test/pathN`
 
 **Why:** M1b feeds real client logs through the sanitizer; the residual check only covers values it already learned, so unlearned patterns pass silently.
