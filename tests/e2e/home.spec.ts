@@ -197,6 +197,22 @@ test.describe('storage', () => {
     await expect(cards(page)).toHaveCount(2)
   })
 
+  test('saves a file dropped while the app is still starting up', async ({ page }) => {
+    // Start-up waits on the storage check; hold it so the drop lands before it finishes.
+    await page.addInitScript(() => {
+      if (navigator.storage) {
+        navigator.storage.persisted = () =>
+          new Promise((resolve) => setTimeout(() => resolve(false), 1500))
+      }
+    })
+    await page.reload()
+    await expect(page.getByRole('heading', { name: 'PAD Log Viewer' })).toBeVisible()
+    await drop(page, [fixture(NESTED)])
+    await expect(cards(page)).toHaveCount(1)
+    await page.reload()
+    await expect(cards(page)).toHaveCount(1)
+  })
+
   test('works as a session-only viewer when IndexedDB is unavailable', async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(window, 'indexedDB', { value: undefined, configurable: true })

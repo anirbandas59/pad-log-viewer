@@ -254,6 +254,8 @@ export const useStore = create<State>()((set, get) => {
     },
 
     async addFiles(files) {
+      // A drop during start-up waits for the database, or the run would be kept in memory only.
+      await get().init()
       for (const file of files) {
         let text: string
         try {
@@ -356,6 +358,7 @@ export const useStore = create<State>()((set, get) => {
     },
 
     async exportAll() {
+      await get().init()
       const { db } = get()
       if (!db) return
       try {
@@ -374,6 +377,8 @@ export const useStore = create<State>()((set, get) => {
     },
 
     async importFile(file) {
+      // An import during start-up would otherwise find no database and do nothing.
+      await get().init()
       const { db, runs } = get()
       if (!db) return
       try {
