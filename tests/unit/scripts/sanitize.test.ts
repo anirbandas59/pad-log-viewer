@@ -597,6 +597,25 @@ describe('sanitizeLog rules from the first real export', () => {
     expect(out.csv).toContain('SortableDateTime ...')
   })
 
+  it('replaces long digit runs such as invoice codes and phone numbers, keeping dates', () => {
+    const out = sanitizeRows([
+      {
+        'Log index': '1',
+        'Log message':
+          'Saved 050003521107_55165308.pdf on 20261012 (export 20261012113808); call 13812345678',
+        Inputs: JSON.stringify({ f: param('File name', '050003521107_55165308.pdf') }),
+      },
+    ])
+    for (const d of ['050003521107', '55165308', '13812345678']) expect(out.csv).not.toContain(d)
+    expect(out.csv).toContain('20261012 (export 20261012113808)')
+    expect(out.csv).toMatch(/\d{12}_\d{8}\.pdf/)
+    const after = parseCsv(out.csv)
+    if (!after.ok) throw new Error('parse failed')
+    // The same original maps to the same replacement in every column.
+    const inMessage = /(\d{12}_\d{8})\.pdf/.exec(after.rows[0]!['Log message']!)![1]
+    expect(parsePayload(after.rows[0]!.Inputs!).params[0]!.value).toBe(`${inMessage}.pdf`)
+  })
+
   it('does not treat ordinary long names or paths as blobs', () => {
     const out = sanitizeRows([
       {
