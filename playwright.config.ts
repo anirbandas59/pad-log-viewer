@@ -17,7 +17,8 @@ export default defineConfig({
   webServer: {
     command: `npm run build && npx vite preview --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}/pad-log-viewer.html`,
-    reuseExistingServer: !process.env.CI,
+    // Always build and serve fresh: a reused server may still serve an older build.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 })
