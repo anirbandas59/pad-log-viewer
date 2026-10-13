@@ -11,9 +11,10 @@ export interface InlineHashes {
 
 const SCRIPT = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi
 const STYLE = /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi
-// Attributes that make the browser load or submit to a URL. `data` is <object data>, never data-*.
+// Attributes that make the browser load or submit to a URL. `data` is <object data>, never
+// data-*; `xlink:href` is SVG's namespaced form of href.
 const URL_ATTR =
-  /\s(?:src|href|srcset|poster|data|action)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
+  /\s(?:xlink:)?(src|href|srcset|poster|data|action)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
 
 const hash = (text: string) =>
   `'sha256-${createHash('sha256').update(text, 'utf8').digest('base64')}'`
@@ -28,17 +29,24 @@ export function inlineHashes(html: string): InlineHashes {
 }
 
 /**
- * Every `src`/`href` in the page's tags that would load something: anything but a `data:`
- * URI or an in-page `#` link. Script and style bodies are skipped, since text inside them is
- * not markup.
+ * Every URL in the page's tags that would load or submit something: `src`, `href` (and SVG
+ * `xlink:href`), each `srcset` candidate, `poster`, `<object data>` and `<form action>`, except
+ * `data:` URIs and in-page `#` links. Script and style bodies are skipped, since text inside
+ * them is not markup.
  */
 export function externalReferences(html: string): string[] {
   const markup = html.replace(SCRIPT, '<script$1></script>').replace(STYLE, '<style></style>')
   const refs: string[] = []
   for (const tag of markup.match(/<[a-z][^>]*>/gi) ?? []) {
     for (const m of tag.matchAll(URL_ATTR)) {
-      const url = (m[1] ?? m[2] ?? m[3] ?? '').trim()
-      if (!/^(data:|#)/i.test(url)) refs.push(url)
+      const value = (m[2] ?? m[3] ?? m[4] ?? '').trim()
+      // srcset lists "url descriptor" candidates separated by a comma and whitespace (a data:
+      // URI's own comma has no whitespace after it); each candidate's URL is checked.
+      const urls =
+        m[1]!.toLowerCase() === 'srcset'
+          ? value.split(/,\s+/).map((c) => c.trim().split(/\s+/)[0] ?? '')
+          : [value]
+      for (const url of urls) if (url && !/^(data:|#)/i.test(url)) refs.push(url)
     }
   }
   return refs
