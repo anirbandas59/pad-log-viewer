@@ -56,6 +56,13 @@ const offline = (url: string) =>
   url === FILE_URL || url.startsWith('data:') || url.startsWith('blob:')
 
 test.describe('the built file', () => {
+  // These open dist/ from disk themselves, so the result is the same in every project: run once.
+  // Playwright requires the fixtures argument to be destructured, even when empty.
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== 'file', 'ship tests run in the file project only')
+  })
+
   test('is one self-contained HTML file within the 1.5 MB budget', () => {
     expect(readdirSync(DIST)).toEqual(['pad-log-viewer.html'])
     expect(statSync(HTML).size).toBeLessThanOrEqual(1.5 * 1024 * 1024)
