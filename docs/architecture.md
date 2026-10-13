@@ -275,15 +275,15 @@ History lives in the browser's IndexedDB by default, with a one-click workspace 
 
 **Storage health check on launch:**
 
-- Call `navigator.storage.persist()` and `navigator.storage.estimate()`.
+- Call `navigator.storage.persist()` and `navigator.storage.estimate()`. `persisted()` is checked first, so a browser that already granted persistence is not asked again; a Storage API call that throws or is missing counts as not persistent (`persistence.ts`).
 - Persistence denied or storage unavailable → yellow banner on Home: "History is kept in this browser only and may be cleared. Export your workspace regularly."
 - Banner offers "Export now" and "Don't show again".
 - If IndexedDB itself is unavailable, the app still works as a session-only viewer.
 
 **Workspace bundle:** one JSON file holding every `RunMeta`, raw CSV and annotation, plus a schema version. Import merges by run id and asks before overwriting.
 
-- Layout (`workspace.ts`): `{ format: "pad-log-viewer-workspace", schemaVersion: 1, exportedAt, runs: [{ meta, csv, annotations }] }`, saved as `pad-log-viewer-<yyyy-mm-dd>.padworkspace.json`. BigInt tick fields of `RunMeta` are written as decimal strings, since JSON numbers would lose precision. Annotations carry no `id` or `runId`: ids are regenerated on import and the run id is the parent run's.
-- The file is untrusted input: `parseWorkspace` checks every field, drops unknown ones, refuses a run id that appears twice, and refuses a bundle with a newer `schemaVersion` than the app knows (asking the user to update) rather than half-reading it.
+- Layout (`workspace.ts`): `{ format: "pad-log-viewer-workspace", schemaVersion: 1, exportedAt, runs: [{ meta, csv, annotations }] }`, saved as `pad-log-viewer-<yyyy-mm-dd>.padworkspace.json`. Export reads all stores in one transaction, so the bundle is a consistent snapshot, and leaves out (and reports) any run whose raw CSV is missing rather than exporting a run that cannot be re-derived. BigInt tick fields of `RunMeta` are written as decimal strings, since JSON numbers would lose precision. Annotations carry no `id` or `runId`: ids are regenerated on import and the run id is the parent run's.
+- The file is untrusted input: `parseWorkspace` checks every field, drops unknown ones, refuses a run id that appears twice and negative tick values, and refuses a bundle with a newer `schemaVersion` than the app knows (asking the user to update) rather than half-reading it.
 - `planImport` lists new runs and runs already in history; the UI asks about the latter, and `importWorkspace` replaces (meta, CSV and annotations together) only the ids the user confirmed, in one transaction. Local runs not in the bundle are kept.
 
 **Deletion:** per-run delete and "Clear all history" in settings, both with a confirmation dialog.
