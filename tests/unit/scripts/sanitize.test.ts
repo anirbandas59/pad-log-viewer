@@ -481,3 +481,35 @@ describe('sanitizeLog with the portal export format', () => {
     expect(parseFileName(out.fileName).flowName).toBe('Invoice_Main')
   })
 })
+
+// Follow-ups from the #13 review: the flow name and the export-timestamp part of the file name.
+describe('sanitizeLog file-name parts', () => {
+  const GUID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
+  const body = () =>
+    toCsv([
+      row({
+        'Log index': '1',
+        'Log message': 'Running Acme_PID_X99_Invoice_Main for the night batch',
+        Inputs: JSON.stringify({ F: param('Flow', 'Acme_PID_X99_Invoice_Main') }),
+      }),
+    ])
+
+  it('removes the original flow name from the log body too', () => {
+    for (const flowName of [undefined, 'Invoice_Main']) {
+      const out = sanitizeLog(body(), {
+        fileName: `Acme_PID_X99_Invoice_Main-${GUID}-20261012T113808Z.csv`,
+        flowName,
+      })
+      expect(out.csv.toLowerCase()).not.toContain('acme_pid_x99_invoice_main')
+      expect(out.residual).toEqual([])
+    }
+  })
+
+  it('keeps the export timestamp only when it has the portal shape', () => {
+    const kept = sanitizeLog(body(), { fileName: `Flow-${GUID}-20261012T113808Z.csv` })
+    expect(kept.fileName.endsWith('-20261012T113808Z.csv')).toBe(true)
+    const odd = sanitizeLog(body(), { fileName: `Flow_${GUID}_ClientCorp.csv` })
+    expect(odd.fileName.toLowerCase()).not.toContain('clientcorp')
+    expect(parseFileName(odd.fileName).matched).toBe(true)
+  })
+})
