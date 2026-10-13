@@ -111,7 +111,9 @@ pad-log-viewer/
 │  │  │  ├─ effect.ts           # one-line effect summary per row
 │  │  │  ├─ blocks.ts           # If/Loop nesting depth
 │  │  │  ├─ variables.ts        # variable assignment index
-│  │  │  └─ summary.ts          # run-level metrics, slowest actions
+│  │  │  ├─ summary.ts          # run-level metrics, slowest actions
+│  │  │  ├─ search.ts           # lower-cased search text per row
+│  │  │  └─ deriveRun.ts        # stages 5–6 over a normalized run
 │  │  └─ storage/
 │  │     ├─ db.ts               # IndexedDB schema and migrations
 │  │     ├─ history.ts          # save, list, delete runs
@@ -243,13 +245,18 @@ A dropped file passes through seven synchronous stages in `core/`, then the UI r
 4. **Normalize** — each raw row becomes a `LogRow`: integers parsed, timestamps converted to BigInt ticks, Inputs/Outputs parsed to `Param[]` with a `truncated` flag.
 5. **Derive (per row)**
    1. Duration and offset from run start.
-   2. Effect summary: for actions that write a variable, `variable ← value` (value cut to 80 characters); for conditionals, `Condition = value`; otherwise the first input.
-   3. Block depth: +1 after a block-opening action (If, Loop, For each, Loop condition), −1 at the matching End. Opening and closing action names are a configurable list, to be confirmed against real logs in real-log validation before v1 (deferred M1b). A real 1,235-row export (2026-10-13) logged 154 `FlowControl.End` rows against about 320 possible openers (`Conditionals.If` 155, `Loops.Foreach` 57, `FlowControl.Block` 49, `Loops.Loop` 24, `System.IfProcessAction` 18, `File.IfFileAction` 11, `Folder.IfFolderExistsAction` 4, `Conditionals.Switch` 2), plus mid-block `Conditionals.Else` / `Conditionals.Case`, `Loops.Break` / `Continue` and `FlowControl.GoTo` / `Label`. A plain +1/−1 by action name therefore drifts: depth is best-effort and resets at each subflow boundary.
+   2. Effect summary: for actions that write a variable, `variable ← value` (value cut to 80 characters, whitespace folded to one line, quoted unless a number or boolean); for conditionals and Switch, `<first input label> = value` (e.g. `Condition = False`); for Case, its operator and value (`= BUSINESS`); otherwise `<first input label>: value`.
+   3. Block depth: worked out per subflow from Action index, which is the source line (`blocks.ts`), because a running +1 after a block-opening action and −1 at the matching End drifts on real logs. PAD logs only executed actions: a false If jumps past its body **and its End**; loops log their opener and End on every pass; Exit loop / Next loop jump to the loop's End (logged) and skip the Ends of the blocks they leave; Go to leaves blocks without an End. A real 1,235-row export (2026-10-13) logged 154 `FlowControl.End` rows against about 320 possible openers (`Conditionals.If` 155, `Loops.Foreach` 57, `FlowControl.Block` 49, `Loops.Loop` 24, `System.IfProcessAction` 18, `File.IfFileAction` 11, `Folder.IfFolderExistsAction` 4, `Conditionals.Switch` 2), plus mid-block `Conditionals.Else` / `Conditionals.Case`, `Loops.Break` / `Continue` and `FlowControl.GoTo` / `Label`. Opening and closing action names are a configurable list, to be confirmed against more real logs in real-log validation before v1 (deferred M1b).
+      - Evidence from the log order: an End followed by a loop opener on an earlier line is that loop's End; an End right after Exit/Next loop is the innermost loop's End; a conditional whose next executed line skips ahead (and is not Else/Case) ends before that line, unless its logged Condition is `True` (`Conditionals.If` logs the evaluated condition as its input); a Go to that jumps forward closes every open block.
+      - A sweep over the subflow's executed lines in source order keeps a stack of open blocks and gives each line the number of blocks open around it. Else/Case take their opener's depth; End takes the depth outside its block.
+      - Every pass of a loop gets the same depth, and depth cannot drift into another subflow. Default action lists (`DEFAULT_DEPTH_RULES`, `Module.Action` patterns): loops `Loops.Loop`, `Loops.Foreach`, `Loops.LoopCondition`; conditionals `*.If*`; blocks `FlowControl.Block`, `Conditionals.Switch`; middles `Conditionals.Else`, `ElseIf`, `Case`, `DefaultCase`; ends `FlowControl.End`; loop exits `Loops.Break`, `Loops.Continue`; go to `FlowControl.GoTo`.
+      - Checked against the synthetic nested fixture and hand-worked spans of the real export (`tests/unit/fixtures/realDepth.test.ts`). Still best-effort: an End skipped by a jump with no other evidence (e.g. a true block left by an error handler) leaves its block open until the subflow's last line.
    4. Failure flag from Status and Log level.
 6. **Index (per run)**
-   1. Variable index: variable name → ordered list of assignments (`logIndex`, value).
-   2. Facet counts for subflow, module, status and level, for filter chips.
-   3. Summary: total duration, time per subflow, top 10 slowest actions, first failure.
+   1. Variable index: variable name → ordered list of assignments (`logIndex`, subflow, value, truncated), taken from every output parameter that names a variable; names in order of first assignment.
+   2. Facet counts for subflow, module (display name), status and level, for filter chips, in order of first appearance.
+   3. Summary: total duration, time per subflow, top 10 slowest actions (ties by Log index), first failure, failure and warning counts, overall status (`Failed` if any row is a failure, `Unknown` for no rows, else `Succeeded`). Time per subflow gives each row the wall-clock span from its start to the next row's start (the last row: to run end), so a Run subflow action is not counted twice and the parts sum to the run duration.
+   4. Search text: lower-cased subflow, module and action names, level, status, message, effect and every parameter's label, variable and value (raw Inputs/Outputs when malformed), joined by newlines so a query cannot match across fields.
 7. **Persist** — raw CSV and `RunMeta` are written to IndexedDB; the UI does not wait on this write.
 
 Search runs on the precomputed `searchText` with a 150 ms debounce; filters compose as AND across facets and OR within a facet.
