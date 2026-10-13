@@ -40,7 +40,7 @@ Nothing is installed and nothing needs a server, Node or admin rights.
 
 ### If something is blocked
 
-- **The page is blank or the download is refused:** some estates block `.html` downloads from SharePoint or Teams. Ask the maintainer for the `.zip`.
+- **The page is blank or the download is refused:** some estates block `.html` downloads from SharePoint or Teams. Each release also has `pad-log-viewer-vX.Y.Z.zip`, which holds the same file: download that, extract it, and open the HTML.
 - **"History is kept in this browser only and may be cleared":** your browser did not grant persistent storage. The app still works; export your workspace regularly.
 
 ## What's new
