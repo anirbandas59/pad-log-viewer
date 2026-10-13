@@ -288,6 +288,16 @@ describe('sanitizeLog', () => {
         msg: String.raw`C:\Temp\a b.txt '\\fs09\vault\y'`,
         secrets: ['fs09', 'vault'],
       },
+      {
+        name: 'a file:// drive address with backslash separators',
+        msg: String.raw`Opened file:///D:\Clients\Acme\x`,
+        secrets: ['clients', 'acme'],
+      },
+      {
+        name: 'a file:// address with a bracket before a separator',
+        msg: String.raw`Opened file://fs01/Clients (old)\Acme\x`,
+        secrets: ['fs01', 'clients', 'acme'],
+      },
     ])('does not swallow $name', ({ msg, secrets }) => {
       it('in plain text', () => {
         expectClean({ 'Log message': msg }, secrets)
@@ -303,6 +313,10 @@ describe('sanitizeLog', () => {
         if (!after.ok) throw new Error('parse failed')
         expect(parsePayload(after.rows[0]!.Inputs!).malformed).toBe(true)
       })
+    })
+
+    it('still learns file:// machine names that look like generic web labels', () => {
+      expectClean({ 'Log message': 'The portal box shares file://portal/drop/x.pdf' }, ['portal'])
     })
 
     it('does not learn generic host labels such as api as sensitive names', () => {

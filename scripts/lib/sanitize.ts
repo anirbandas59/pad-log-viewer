@@ -42,12 +42,20 @@ function pathRest(s: string): string {
   ].join('|')
   return String.raw`(?:(?!${nextItem})[^:*?"<>|\r\n])*`
 }
-// file:// addresses are often typed by hand with spaces, so they follow the path rule
-// (optionally file://host/C: or file:///C:); web URLs stop at whitespace.
-const URL_RE = new RegExp(
-  String.raw`\bfile:\/\/(?:(?:[\w.-]*\/)?[A-Za-z]:)?${pathRest(String.raw`\\`)}|\bhttps?:\/\/[^\s"'<>]*`,
-  'gi',
-)
+/**
+ * file:// addresses are often typed by hand with spaces, so they follow the path rule
+ * (optionally file://host/C: or file:///C:); web URLs stop at whitespace. Built per call
+ * from the separator `s`: in escaped (malformed JSON) cells every separator is already
+ * `\\`, which the plain-text UNC guard would read as the start of the next item.
+ */
+function urlRe(s: string): RegExp {
+  return new RegExp(
+    String.raw`\bfile:\/\/(?:(?:[\w.-]*\/)?[A-Za-z]:)?${pathRest(s)}|\bhttps?:\/\/[^\s"'<>]*`,
+    'gi',
+  )
+}
+// learn() runs on unescaped text, so it uses the plain-text separator.
+const URL_RE = urlRe(String.raw`\\`)
 // One path segment: no separator and no Windows-forbidden character.
 const SEG = String.raw`[^\\/:*?"<>|\r\n]+`
 // DOMAIN\account in any case. The domain must not continue a path (no separator, drive
@@ -61,17 +69,13 @@ const USER_DIR = new RegExp(String.raw`(?<!\w)[A-Za-z]:[\\/]Users[\\/](${SEG})`,
 const UNC_HOST = new RegExp(String.raw`(?<![\\/:])(?:\\\\|//)(${SEG})[\\/]`, 'g')
 const ONEDRIVE_ORG = /OneDrive - ([^\\/:*?"<>|\r\n]+)/gi
 const SHAREPOINT_SITE = /\/(?:sites|teams)\/([^/?#\s"'<>]+)/gi
-// Host labels that identify nobody. Learning them would also rewrite our own pseudonyms
-// and, as substring terms, mangle ordinary names (api would turn Call_API into Call_term1).
-const HOST_NOISE = new Set([
-  'www',
-  'com',
-  'net',
-  'org',
-  'co',
-  'example',
-  'test',
-  'localhost',
+// Host labels that identify nobody; learning them would also rewrite our own pseudonyms.
+const HOST_NOISE = new Set(['www', 'com', 'net', 'org', 'co', 'example', 'test', 'localhost'])
+// Extra labels skipped for web hosts only: as substring terms they would mangle ordinary
+// names (api would turn Call_API into Call_term1). file:// hosts are bare machine names,
+// and a machine called portal or dev must still be learned.
+const WEB_HOST_NOISE = new Set([
+  ...HOST_NOISE,
   'api',
   'app',
   'apps',
@@ -214,8 +218,10 @@ class Sanitizer {
       const [, scheme = '', host = ''] = /^(\w+):\/\/([^/:?#]*)/.exec(m[0]) ?? []
       // Web hosts end in a public suffix; file:// hosts are bare machine names.
       const labels = host.split('.')
-      for (const label of scheme.toLowerCase() === 'file' ? labels : labels.slice(0, -1)) {
-        if (!HOST_NOISE.has(label.toLowerCase())) add(label)
+      const isFile = scheme.toLowerCase() === 'file'
+      const noise = isFile ? HOST_NOISE : WEB_HOST_NOISE
+      for (const label of isFile ? labels : labels.slice(0, -1)) {
+        if (!noise.has(label.toLowerCase())) add(label)
       }
       for (const site of m[0].matchAll(SHAREPOINT_SITE)) add(safeDecode(site[1]!))
     }
@@ -262,7 +268,7 @@ class Sanitizer {
       return this.p.get('guid', g, fakeGuid)
     })
     out = out.replace(
-      URL_RE,
+      urlRe(s),
       keepTrailingSpace((u) => {
         this.p.count('url')
         const scheme = u.slice(0, u.indexOf(':')).toLowerCase()
