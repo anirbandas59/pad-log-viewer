@@ -179,7 +179,7 @@ Portal export format: `<flow-name>-<run-guid>-<export-timestamp>.csv`, e.g. `Inv
 - A file that does not match the pattern is still accepted; the flow name falls back to the file name and the run start falls back to the first row's Start time.
 - The GUID is the run id, unique per run, and is the run's key in history. Duplicates are spotted by comparing the run GUID **and** the export timestamp (`isSameExport` / `isSameRun` in `fileName.ts`):
   - same GUID and same export timestamp: the same export dropped again; it is already in history.
-  - same GUID, different export timestamp: the same run exported again; dropping it prompts "Replace or keep both".
+  - same GUID, different export timestamp: the same run exported again; dropping it offers **Replace** only (v1, decided 2026-10-13). "Keep both" would need a history key other than the run GUID, a data-model change deferred past v1.
 
 ### Parsing rules
 
