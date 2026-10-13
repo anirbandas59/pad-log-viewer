@@ -69,7 +69,7 @@ Every runtime library is bundled into the output HTML; nothing loads from a CDN 
 | Virtualization | TanStack Virtual | Renders only visible rows |
 | State | Zustand | Small store, no provider boilerplate |
 | Styling | Tailwind CSS with CSS-variable theme tokens | Light/dark themes, responsive utilities |
-| Charts | Recharts (or uPlot if bundle size matters) | Overview bars and breakdowns |
+| Charts | Plain CSS bars in `features/overview` (no chart library) | Overview bars and breakdowns are simple horizontal bars; a library would add bundle size for no gain. Recharts was planned and removed unused before v1 |
 | Icons | lucide-react (tree-shaken) | Module and status icons |
 | Storage | IndexedDB via `idb` | Run history, notes, bookmarks |
 | JSON viewer | Small in-house collapsible tree | Avoids a heavy dependency |
