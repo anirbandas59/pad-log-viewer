@@ -156,15 +156,17 @@ Nine milestones, each one PR into `dev`, built bottom-up so every PR is testable
 | --- | --- | --- | --- |
 | M0 | `main` (local) | Bootstrap as above | `npm run check` green; repo, labels and protection in place |
 | M1 | `feature/m1-csv-core` | `fileName`, `parseCsv`, `schema`, `ticks`, `payload`, `normalize`; sanitizer script; synthetic fixtures incl. 10k rows | File-name parse handles underscores in flow names; sub-ms durations exact; truncated values flagged; malformed JSON keeps raw string; 10k rows parse + normalize < 1 s |
-| M1b | local, by you | Run the sanitizer on 2–3 real logs (one failed run, one with nested If/Loop) and commit to `tests/fixtures/` | Fixtures contain no usernames, client paths or project ids |
-| M2 | `feature/m2-derive` | Effect summary, block depth (configurable action list), variable index, run summary, search text | Depth rules verified on the real nested fixture; top-10 slowest correct; variable history ordered by Log index |
+| M1b | local, by you — **deferred to v1 validation** (no real exports available, decided 2026-10-13) | Run the sanitizer on 2–3 real logs (one failed run, one with nested If/Loop) and commit to `tests/fixtures/` | Fixtures contain no usernames, client paths or project ids |
+| M2 | `feature/m2-derive` | Effect summary, block depth (configurable action list), variable index, run summary, search text | Depth rules verified on a synthetic nested fixture (If/Loop/For each inside each other, with End rows); real-log check deferred to v1 validation; top-10 slowest correct; variable history ordered by Log index |
 | M3 | `feature/m3-storage` | IndexedDB schema, history, workspace export/import, persistence check | Tested with an in-memory IndexedDB; import merges by run GUID; bundle carries schema version |
 | M4 | `feature/m4-shell-home` | Theme tokens, app shell, drop zone, error cards, history list, storage banner, duplicate prompt | Multi-file drop; dark/light; works at 375, 768 and 1366 px |
 | M5 | `feature/m5-run-overview` | Run header, tab scaffold, Overview tab | First-failure card jumps to its row; subflow time bars sum to run duration |
 | M6 | `feature/m6-log-drawer` | Virtualized log table, filter bar, column picker, keyboard shortcuts, row drawer, JSON tree, copy actions | 10k rows scroll without blank rows; filter update < 100 ms; drawer shows truncation badge |
 | M7 | `feature/m7-vars-errors` | Variables tab, Errors tab, bookmarks and notes, export filtered CSV, density toggle | Notes survive reload; exported CSV re-imports cleanly |
 | M8 | `feature/m8-ship` | Single-file build, CSP, Playwright e2e on `file://`, zero-network assertion, size budget, release workflow, README | Built HTML opens from disk in Chromium and works end to end; zero network requests; ≤ 1.5 MB |
-| Release | `dev` → `main` | A local session follows the release checklist in `CLAUDE.md` and opens the PR; you merge; tag `v1.0.0` builds the HTML | You open the HTML on a locked-down machine and on Windows Edge |
+| Release | `dev` → `main` | A local session follows the release checklist in `CLAUDE.md` and opens the PR; you merge; tag `v1.0.0` builds the HTML | You open the HTML on a locked-down machine and on Windows Edge; real-log validation (deferred M1b) passes |
+
+**Real-log validation (deferred M1b).** Until real exports are available, milestones verify against synthetic fixtures, and block opening/closing action names stay a configurable list. Before the v1 release you sanitize 2–3 real exports (one failed run, one with nested If/Loop) into `tests/fixtures/`, and the criteria that name real logs are re-checked against them: M2 depth rules, and parse + normalize < 1 s on a real 10k-row log. Mismatches are fixed in a `fix(m<N>)` PR before the release PR.
 
 Milestones run one at a time: each starts from the `dev` that contains the previous merge, and parallel cloud sessions would share your plan's usage limits anyway.
 
@@ -178,7 +180,7 @@ Agents decide routine engineering matters themselves and stop for anything that 
 - A PR labelled `needs-human` after 3 review rounds.
 - Any deviation from the Architecture tab: a dependency outside the tech stack, a data-model change, anything that adds a network call.
 - Changes to `.claude/`, `CLAUDE.md` or CI workflows; the cloud developer is blocked from making them, so it proposes them in the PR body.
-- M1b: providing real logs for sanitized fixtures.
+- M1b: providing real logs for sanitized fixtures (deferred to v1 validation).
 - `dev` CI turning red after a merge, or a usage limit stopping a session.
 
 **Not escalated:** lint and formatting fixes, extra tests, refactors inside a milestone, Suggestion-level review findings.

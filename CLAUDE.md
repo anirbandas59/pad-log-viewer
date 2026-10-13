@@ -43,7 +43,9 @@ Escalate (stop and ask in the PR/session) for: a dependency outside the Architec
 ## Release checklist (dev → main, local session)
 
 1. `dev` CI green; all milestone PRs merged; `npm ci && npm run check && npm run test:e2e` green locally.
-2. Bump `version` in `package.json`; update README reviewer guide and "What's new".
-3. Open PR `dev` → `main` titled `chore(release): vX.Y.Z` with the changelog; the maintainer merges.
-4. Maintainer tags `vX.Y.Z` on `main`; `release.yml` builds `pad-log-viewer-vX.Y.Z.html` and attaches it to the release.
-5. Maintainer checks the HTML on a locked-down machine and in Windows Edge from `file://`.
+2. Real-log validation (deferred M1b): the maintainer sanitizes 2–3 real exports into `tests/fixtures/` (`npm run sanitize`); add tests that re-check M2 depth rules and the < 1 s parse + normalize budget against them; fix mismatches in a `fix(m<N>)` PR first.
+3. Bump `version` in `package.json`; update README reviewer guide and "What's new".
+4. Open PR `dev` → `main` titled `chore(release): vX.Y.Z` with the changelog; the maintainer merges.
+5. Maintainer tags `vX.Y.Z` on `main`; `release.yml` builds `pad-log-viewer-vX.Y.Z.html` and attaches it to the release.
+6. Maintainer checks the HTML on a locked-down machine and in Windows Edge from `file://`.
+7. After the v1 merge (`main` and `dev` equal again), fix `claude-review.yml` in one PR to both branches: move `concurrency` from workflow to job level (skipped runs currently cancel live reviews) and add `checks: read` (the reviewer cannot read CI status).
