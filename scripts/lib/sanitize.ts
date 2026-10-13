@@ -74,6 +74,11 @@ const ONEDRIVE_ORG = /OneDrive - ([^\\/:*?"<>|\r\n]+)/gi
 // or after a list separator (an unquoted name mid-sentence would learn ordinary words).
 const DISPLAY_NAME =
   /(?:"([^"<>\r\n]{2,80})"|(?:^|[,;:]\s*)([A-Za-z][^"<>\r\n,;:]{1,60}?))\s*<\s*[\w.+-]+@[\w-]+(?:\.[\w-]+)+\s*>/g
+// Runs of 8+ digits: invoice codes and numbers, phone and account numbers. Dates written as
+// yyyyMMdd or yyyyMMddHHmmss are kept.
+const DIGITS = /(?<!\d)\d{8,}(?!\d)/g
+const DATE_DIGITS =
+  /^(?:19|20)\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?:[01]\d|2[0-3])?(?:[0-5]\d){0,2}$/
 // Long base64 or hex runs: encoded documents, OCR results, mailbox item ids, hashes, ciphertext.
 // PAD cuts long values and appends "...", so a run right before that marker counts from 20 chars.
 const BLOB =
@@ -164,6 +169,7 @@ class Pseudonyms {
     url: 0,
     account: 0,
     blob: 0,
+    digits: 0,
     term: 0,
   }
   /** Lower-cased originals that must not survive. */
@@ -287,7 +293,13 @@ class Sanitizer {
   text(input: string, escaped = false): string {
     const sep = escaped ? '\\\\' : '\\'
     const s = escapeRe(sep)
-    let out = input.replace(GUID, (g) => {
+    // Before GUIDs: replacements keep the length, so a GUID with an all-digit group stays a GUID.
+    let out = input.replace(DIGITS, (d) => {
+      if (DATE_DIGITS.test(d) && (d.length === 8 || d.length === 14)) return d
+      this.p.count('digits')
+      return this.p.get('digits', d, (n) => String(n).padStart(d.length, '0'))
+    })
+    out = out.replace(GUID, (g) => {
       this.p.count('guid')
       this.p.secrets.add(g.toLowerCase())
       return this.p.get('guid', g, fakeGuid)
