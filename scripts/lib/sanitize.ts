@@ -380,6 +380,9 @@ export function sanitizeLog(csv: string, options: SanitizeOptions): SanitizeResu
   const nameInfo = parseFileName(options.fileName)
 
   const s = new Sanitizer(options.terms ?? [], new Set(header.map((h) => h.trim().toLowerCase())))
+  // The original flow name can appear in the body too (messages, Run flow inputs); remove it
+  // there as well, whether or not --flow renames the fixture.
+  if (nameInfo.matched && nameInfo.flowName.length >= 3) s.addTerm(nameInfo.flowName)
   // JSON cells are learned from their decoded strings so paths match the plain-text patterns.
   for (const r of rows) {
     r.forEach((cell, i) => {
@@ -404,7 +407,11 @@ export function sanitizeLog(csv: string, options: SanitizeOptions): SanitizeResu
     const sep2 = base.charAt(nameInfo.flowName.length + 1 + 36)
     const flow = options.flowName ?? s.p.get('flow', nameInfo.flowName, (n) => `flow${n}`)
     const guid = s.text(nameInfo.runId!)
-    fileName = `${flow}${sep1}${guid}${sep2}${nameInfo.exportedAt!}.csv`
+    // Keep the export timestamp only in the portal shape; anything else may be free text.
+    const exported = /^\d{8}T\d{6}Z$/i.test(nameInfo.exportedAt!)
+      ? nameInfo.exportedAt!
+      : s.p.get('export', nameInfo.exportedAt!, (n) => `export${n}`)
+    fileName = `${flow}${sep1}${guid}${sep2}${exported}.csv`
   } else {
     fileName = (options.flowName ?? s.text(options.fileName.replace(/\.csv$/i, ''))) + '.csv'
   }
