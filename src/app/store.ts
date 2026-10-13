@@ -5,7 +5,9 @@ import {
   clearHistory,
   deleteRun,
   getRun,
+  listAnnotations,
   listRuns,
+  replaceRowAnnotations,
   saveRun,
   updateRun,
 } from '../core/storage/history.ts'
@@ -26,7 +28,11 @@ import {
 import { classifyDrop, ingestCsv, mergeReplace, type IngestedRun } from '../core/model/ingest.ts'
 import type { HistoryQuery } from '../core/model/historyView.ts'
 import { deriveCsv, type DerivedRun } from '../core/derive/deriveRun.ts'
-import type { RunMeta } from '../core/model/types.ts'
+import type { Annotation, RunMeta } from '../core/model/types.ts'
+import { nextRowAnnotations, rowMarks, type RowMark } from '../core/derive/annotations.ts'
+import { readDensity, type Density } from '../core/derive/density.ts'
+import { filteredFileName, rowsToCsv } from '../core/derive/exportCsv.ts'
+import { filterRows } from '../core/derive/filter.ts'
 import { EMPTY_FILTERS, type LogFilters } from '../core/derive/filter.ts'
 import {
   defaultColumnVisibility,
@@ -71,6 +77,8 @@ export type Confirm = { kind: 'delete'; run: RunMeta } | { kind: 'clear' }
 
 /** Settings-store key for the execution log's column visibility. */
 export const LOG_COLUMNS_SETTING = 'logColumns'
+/** Settings-store key for the execution log's row density. */
+export const LOG_DENSITY_SETTING = 'logDensity'
 
 export interface ImportPrompt {
   bundle: WorkspaceBundle
@@ -82,6 +90,8 @@ interface State {
   db: PadDb | null
   /** Runs held in memory only, when IndexedDB is unavailable: id → CSV. */
   memory: Map<string, string>
+  /** Annotations held in memory only, when IndexedDB is unavailable: run id → list. */
+  memoryAnnotations: Map<string, Annotation[]>
   runs: RunMeta[]
   health: StorageHealth | null
   bannerDismissed: boolean
@@ -102,6 +112,9 @@ interface State {
   drawerOpen: boolean
   logFilters: LogFilters
   logColumns: ColumnVisibility
+  logDensity: Density
+  /** The open run's bookmarks and notes. */
+  annotations: Annotation[]
 
   init(): Promise<void>
   addFiles(files: readonly File[]): Promise<void>
@@ -126,7 +139,17 @@ interface State {
   setLogFilters(filters: Partial<LogFilters>): void
   clearLogFilters(): void
   setColumnVisible(id: LogColumnId, visible: boolean): void
+  setLogDensity(density: Density): void
+  /** Sets a row's bookmark and/or note in the open run, and saves them. */
+  setRowMark(logIndex: number, change: Partial<RowMark>): Promise<void>
+  /** Downloads the open run's rows that pass the current filters as a PAD CSV. */
+  exportFilteredCsv(): void
   renameRun(id: string, displayName: string): Promise<void>
+}
+
+/** Log indexes of the bookmarked rows. */
+function bookmarkedIn(annotations: readonly Annotation[]): Set<number> {
+  return new Set([...rowMarks(annotations)].filter(([, m]) => m.bookmarked).map(([i]) => i))
 }
 
 let nextNoticeId = 1
@@ -165,6 +188,7 @@ export const useStore = create<State>()((set, get) => {
     ready: false,
     db: null,
     memory: new Map(),
+    memoryAnnotations: new Map(),
     runs: [],
     health: null,
     bannerDismissed: false,
@@ -182,6 +206,8 @@ export const useStore = create<State>()((set, get) => {
     drawerOpen: false,
     logFilters: EMPTY_FILTERS,
     logColumns: defaultColumnVisibility(),
+    logDensity: 'comfortable',
+    annotations: [],
 
     init() {
       initializing ??= (async () => {
@@ -198,12 +224,14 @@ export const useStore = create<State>()((set, get) => {
         })
         let bannerDismissed = false
         let logColumns = get().logColumns
+        let logDensity = get().logDensity
         if (db) {
           // Settings are best effort: a failed read or write (e.g. storage full) must not
           // stop history from loading.
           try {
             bannerDismissed = (await getSetting<boolean>(db, STORAGE_WARNING_DISMISSED)) === true
             logColumns = readColumnVisibility(await getSetting(db, LOG_COLUMNS_SETTING))
+            logDensity = readDensity(await getSetting(db, LOG_DENSITY_SETTING))
             // localStorage is the authority; the stored copy fills in only when it is empty
             // and the user has not toggled the theme while the database was opening.
             const saved = await getSetting(db, THEME_SETTING)
@@ -219,7 +247,7 @@ export const useStore = create<State>()((set, get) => {
             // Keep the defaults.
           }
         }
-        set({ db, health, bannerDismissed, logColumns, ready: true })
+        set({ db, health, bannerDismissed, logColumns, logDensity, ready: true })
         await refresh()
       })()
       return initializing
@@ -311,11 +339,13 @@ export const useStore = create<State>()((set, get) => {
         if (confirm.kind === 'delete') {
           if (db) await deleteRun(db, confirm.run.id)
           memory.delete(confirm.run.id)
+          get().memoryAnnotations.delete(confirm.run.id)
           if (get().activeRunId === confirm.run.id) set({ activeRunId: null, activeRun: null })
           if (!db) set((s) => ({ runs: s.runs.filter((r) => r.id !== confirm.run.id) }))
         } else {
           if (db) await clearHistory(db)
           memory.clear()
+          get().memoryAnnotations.clear()
           set({ activeRunId: null, activeRun: null })
           if (!db) set({ runs: [] })
         }
@@ -420,16 +450,25 @@ export const useStore = create<State>()((set, get) => {
         selectedLogIndex: null,
         drawerOpen: false,
         logFilters: EMPTY_FILTERS,
+        annotations: [],
       })
       if (!id) return
       void (async () => {
         let csv: string | undefined
+        let annotations: Annotation[]
+        const { db, memory, memoryAnnotations } = get()
         try {
-          const { db, memory } = get()
           csv = db ? (await getRun(db, id))?.csv : memory.get(id)
         } catch {
           csv = undefined
         }
+        try {
+          annotations = db ? await listAnnotations(db, id) : (memoryAnnotations.get(id) ?? [])
+        } catch {
+          // The log still opens; its bookmarks and notes could not be read.
+          annotations = []
+        }
+        if (get().activeRunId === id) set({ annotations })
         // Let the loading state paint before the synchronous parse and derive.
         await new Promise((resolve) => setTimeout(resolve, 0))
         if (get().activeRunId !== id) return
@@ -454,7 +493,20 @@ export const useStore = create<State>()((set, get) => {
     },
 
     jumpToRow(logIndex) {
-      set((s) => ({ runTab: 'log', selectedLogIndex: logIndex, jumpSeq: s.jumpSeq + 1 }))
+      // A row the current filters hide could not be shown: clear the filters first.
+      const { activeRun, logFilters, annotations } = get()
+      let filters = logFilters
+      if (activeRun?.status === 'ready') {
+        const row = activeRun.derived.rows.find((r) => r.logIndex === logIndex)
+        const bookmarked = bookmarkedIn(annotations)
+        if (row && filterRows([row], logFilters, bookmarked).length === 0) filters = EMPTY_FILTERS
+      }
+      set((s) => ({
+        runTab: 'log',
+        selectedLogIndex: logIndex,
+        jumpSeq: s.jumpSeq + 1,
+        logFilters: filters,
+      }))
     },
 
     selectRow(logIndex, open) {
@@ -477,6 +529,49 @@ export const useStore = create<State>()((set, get) => {
     clearLogFilters() {
       performance.mark('pad:filter:start')
       set({ logFilters: EMPTY_FILTERS })
+    },
+
+    setLogDensity(logDensity) {
+      set({ logDensity })
+      const { db } = get()
+      if (db) setSetting(db, LOG_DENSITY_SETTING, logDensity).catch(() => {})
+    },
+
+    async setRowMark(logIndex, change) {
+      const runId = get().activeRunId
+      if (!runId) return
+      const current = get().annotations.filter((a) => a.logIndex === logIndex)
+      const next = nextRowAnnotations(current, change, new Date().toISOString())
+      const { db, memoryAnnotations } = get()
+      try {
+        let annotations: Annotation[]
+        if (db) {
+          annotations = await replaceRowAnnotations(db, runId, logIndex, next)
+        } else {
+          annotations = [
+            ...get().annotations.filter((a) => a.logIndex !== logIndex),
+            ...next.map((a) => ({ ...a, runId, logIndex })),
+          ]
+          memoryAnnotations.set(runId, annotations)
+        }
+        if (get().activeRunId === runId) set({ annotations })
+      } catch (err) {
+        failed('Could not save the bookmark or note', err)
+        throw err
+      }
+    },
+
+    exportFilteredCsv() {
+      const { activeRun, logFilters, annotations, runs } = get()
+      if (activeRun?.status !== 'ready') return
+      const meta = runs.find((r) => r.id === activeRun.id)
+      const bookmarked = bookmarkedIn(annotations)
+      const rows = filterRows(activeRun.derived.rows, logFilters, bookmarked)
+      downloadText(
+        filteredFileName(meta?.flowName ?? 'run', new Date()),
+        rowsToCsv(rows),
+        'text/csv;charset=utf-8',
+      )
     },
 
     setColumnVisible(id, visible) {
