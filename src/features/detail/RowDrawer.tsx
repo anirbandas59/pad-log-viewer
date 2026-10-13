@@ -6,9 +6,11 @@ import { rowStatusKind } from '../../core/derive/filter.ts'
 import { stepSelection } from '../../core/derive/logNav.ts'
 import { rowAsText } from '../../core/derive/rowText.ts'
 import { formatDuration, formatOffset } from '../../core/model/format.ts'
+import type { RowMark } from '../../core/derive/annotations.ts'
 import type { LogRow } from '../../core/model/types.ts'
 import { RowStatus } from '../../components/index.ts'
 import { JsonTree } from './JsonTree.tsx'
+import { NoteEditor } from './NoteEditor.tsx'
 import { ParamTable } from './ParamTable.tsx'
 
 const iconButton =
@@ -59,11 +61,21 @@ function Payload({
  * stepping through the filtered rows. Full screen (below the app header) on phones, over the
  * table on tablets, and docked beside it from 1280 px.
  */
-export function RowDrawer({ row, rows }: { row: LogRow; rows: readonly LogRow[] }) {
+const NO_MARK: RowMark = { bookmarked: false, note: '' }
+
+export function RowDrawer({
+  row,
+  rows,
+  mark = NO_MARK,
+}: {
+  row: LogRow
+  rows: readonly LogRow[]
+  mark?: RowMark
+}) {
   const select = useStore((s) => s.selectRow)
   const setOpen = useStore((s) => s.setDrawerOpen)
   const [showRaw, setShowRaw] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null)
   const timer = useRef<number | undefined>(undefined)
   const panel = useRef<HTMLElement>(null)
 
@@ -75,7 +87,7 @@ export function RowDrawer({ row, rows }: { row: LogRow; rows: readonly LogRow[] 
 
   const copy = async (text: string) => {
     const ok = await copyText(text)
-    setToast(ok ? 'Copied' : 'Copy failed')
+    setToast({ ok, text: ok ? 'Copied' : 'Copy failed' })
     window.clearTimeout(timer.current)
     timer.current = window.setTimeout(() => setToast(null), 2000)
   }
@@ -183,9 +195,16 @@ export function RowDrawer({ row, rows }: { row: LogRow; rows: readonly LogRow[] 
         >
           <Copy aria-hidden size={14} /> Copy row as text
         </button>
-        <span role="status" className="self-center text-sm text-success">
-          {toast}
+        <span
+          role="status"
+          className={`self-center text-sm ${toast?.ok === false ? 'text-failure' : 'text-success'}`}
+        >
+          {toast?.text}
         </span>
+      </div>
+
+      <div className="mt-4">
+        <NoteEditor key={row.logIndex} logIndex={row.logIndex} mark={mark} />
       </div>
 
       <div className="mt-4 space-y-4">

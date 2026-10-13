@@ -322,6 +322,13 @@ Opening a run re-derives its stored CSV (`deriveCsv`: parse, normalize, derive) 
 | Variables | What value did X have, and when? | Variable list with assignment counts; selecting one shows its assignment history with links to rows |
 | Errors | Why did it fail? | Each failed row plus the 3 rows before it; Log message shown in full |
 
+As built (M7):
+
+- **Variables:** `variableSummaries` lists the variable index in order of first assignment, with assignment count and last value, filtered by a name search. Choosing one shows its assignments in Log index order (virtualized, so a variable written on every row stays fast), each with "Go to row #N", its subflow, the value as text and the "truncated by PAD" badge.
+- **Errors:** `errorContexts` gives each failed row in Log index order with the up to 3 rows just before it (another failure can be one of them); the card shows the Log message in full and "Jump to row". A run without failures says "No failures in this run."
+- **Jump to row** (Overview, Variables, Errors) clears the execution-log filters when they would hide the target row.
+- **Export filtered CSV** (run header) downloads the rows that pass the current filters, bookmark filter included. `rowsToCsv` writes them back as read (timestamps and Inputs/Outputs verbatim, the PAD columns in portal order, extra columns after them, BOM and `sep=,` line, CRLF), so they parse to the same rows; tests round-trip every row of the committed fixtures cell for cell. The file is `<flow>-filtered-<yyyyMMddTHHmmssZ>.csv`: it carries no run GUID on purpose, so dropping it back in stores it as a run of its own (keyed by content hash) instead of offering to Replace the full run with the subset. Like the portal export, cells are not escaped against spreadsheet formulas, since that would change the values.
+
 ### Execution log table
 
 | Column | Default | Notes |
@@ -342,7 +349,7 @@ Opening a run re-derives its stored CSV (`deriveCsv`: parse, normalize, derive) 
 
 As built (M6):
 
-- Rows are virtualized with TanStack Virtual at fixed heights (36 px table rows, 88 px cards), so nothing is measured while scrolling. The grid (`role="grid"`, `aria-rowcount` = rows shown) holds a sticky header row; columns come from `LOG_COLUMNS` and keep their grid tracks, and the table scrolls sideways inside its own box when the columns are wider than it. Time is `formatOffset` (`+mm:ss.fff`, `+h:mm:ss.fff` past an hour) with the exported timestamp as a tooltip; the Duration bar is scaled to the run's slowest action. The module icon in the Action column is not built yet.
+- Rows are virtualized with TanStack Virtual at fixed heights (table rows 40 px, or 28 px compact, from M7; 88 px cards), so nothing is measured while scrolling. The grid (`role="grid"`) holds a sticky header row; `aria-rowcount` counts it with the rows shown, the header is row 1 and data rows follow, and `aria-activedescendant` names the selected row while it is rendered (M7); columns come from `LOG_COLUMNS` and keep their grid tracks, and the table scrolls sideways inside its own box when the columns are wider than it. Time is `formatOffset` (`+mm:ss.fff`, `+h:mm:ss.fff` past an hour) with the exported timestamp as a tooltip; the Duration bar is scaled to the run's slowest action. The module icon in the Action column is not built yet.
 - Filtering is `filterRows` in core: search terms are split on whitespace and all must occur in the row's `searchText`; facets OR within a facet and AND across facets; Errors only keeps `isFailure` rows; Hide noise drops `Variables.SetVariable`/`Assign` and `Conditionals.If`/`Else`/`ElseIf` (`isNoise`). Status chips use `rowStatusKind`: Failed (`isFailure`), Warning (Log level contains "warn"), Succeeded, Unknown. Subflow and module chips are checkbox lists behind "Subflows" and "Modules" buttons, with row counts. Search is debounced 150 ms. Each filter change is timed from the store update to the table's commit as the `pad:filter` performance measure (budget < 100 ms).
 - The count reads "N of M rows"; the active-filter count is the search (1), each chosen facet value and each toggle. "Clear filters" also clears the search box.
 - Column visibility is saved to the `settings` store under `logColumns` (best effort, read at start-up with `readColumnVisibility`); the Action column cannot be hidden.
@@ -357,7 +364,9 @@ As built (M6):
 - Bookmark toggle and a note field, saved to history.
 - Previous / Next buttons to step through rows without closing.
 
-As built (M6): parameters list Parameter · Variable · Value with a copy button each; a payload that is not JSON is shown as its raw text. "Raw JSON" swaps both tables for `JsonTree` (`role="tree"`, branches open two levels deep). "Copy row as text" uses `rowAsText` and the Clipboard API, falling back to `execCommand('copy')`, with a "Copied" status message. Previous / Next step through the filtered rows. Bookmarks and notes are M7.
+As built (M6): parameters list Parameter · Variable · Value with a copy button each; a payload that is not JSON is shown as its raw text. "Raw JSON" swaps both tables for `JsonTree` (`role="tree"`, branches open two levels deep). "Copy row as text" uses `rowAsText` and the Clipboard API, falling back to `execCommand('copy')`, with a "Copied" status message. Previous / Next step through the filtered rows.
+
+As built (M7): a "Bookmark" toggle and a "Note" box per row (`NoteEditor`). The note saves 400 ms after typing stops, on blur, and when the drawer moves to another row or closes, and shows "Saved" or "Not saved". A row keeps at most one bookmark and one note in the `annotations` store (`nextRowAnnotations`; `replaceRowAnnotations` swaps a row's annotations in one transaction); clearing the note deletes it. Saves run one at a time, each applied to the row as last saved (`setRowMark` reads the stored annotations in its turn), so a note followed at once by a bookmark click keeps both, and the bookmark toggles against the saved state. Run-level notes (`logIndex` absent) are in the model but have no UI yet. Bookmarked and noted rows show markers in the # column and on cards, and "Bookmarked" in the filter bar keeps only bookmarked rows. In session-only mode annotations are kept in memory.
 
 ### Visual system
 
@@ -365,7 +374,7 @@ As built (M6): parameters list Parameter · Variable · Value with a copy button
 - **Subflow colours:** assigned from a 10-colour palette by hashing the subflow name, so `main` keeps its colour across runs.
 - **Themes:** dark (default) and light, defined as CSS variables; contrast meets WCAG AA. The toggle sets `data-theme` on `<html>`. The choice is saved in localStorage, which is read before the first paint and wins at startup, and copied to the `settings` store, which restores it only when localStorage is empty (`app/theme.ts`). A toggle made before the database opens is therefore kept, and later written to the store.
 - **Type:** system UI font for text, monospace for values, variable names and timestamps.
-- **Density toggle:** comfortable (40 px rows) and compact (28 px rows).
+- **Density toggle:** comfortable (40 px rows) and compact (28 px rows). As built (M7): "Compact rows" in the filter bar; saved to the `settings` store as `logDensity`; table rows only (cards stay 88 px).
 
 ### Responsive behaviour
 
@@ -376,6 +385,8 @@ As built (M6): parameters list Parameter · Variable · Value with a copy button
 | < 768 px | Rows render as cards (action, status, duration, effect); drawer is full screen |
 
 As built (M6): the app header is sticky (3.5 rem) and the drawer opens below it, so the theme switch stays reachable; the run view widens to 110 rem. At 768–1279 px the drawer is a fixed panel up to 32 rem wide over the table; the table keeps the same default columns and scrolls sideways inside its box instead of dropping columns.
+
+As built (M7): the run header strip is sticky (below the app header) from 768 px only; on phones it is too tall to keep on screen.
 
 The primary target is a 1366–1920 px laptop or monitor; small screens are functional, not optimised.
 

@@ -1,4 +1,4 @@
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { ArrowLeft, Download, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { formatTicks } from '../../app/format.ts'
 import { useStore } from '../../app/store.ts'
@@ -66,14 +66,25 @@ function DisplayName({ run }: { run: RunMeta }) {
 /** Sticky strip: back, editable name, status and the run's key numbers. */
 export function RunHeader({ run, summary }: { run: RunMeta; summary?: RunSummary }) {
   const openRun = useStore((s) => s.openRun)
+  const exportCsv = useStore((s) => s.exportFilteredCsv)
   return (
     <header
       data-testid="run-header"
-      className="sticky top-0 z-10 -mx-4 space-y-3 border-b border-border bg-bg/95 px-4 py-3 backdrop-blur"
+      // Sticky below the app header from 768 px; on phones it is too tall to keep on screen.
+      className="z-10 -mx-4 space-y-3 border-b border-border bg-bg/95 px-4 py-3 backdrop-blur md:sticky md:top-14"
     >
-      <Button variant="ghost" className="-ml-2" onClick={() => openRun(null)}>
-        <ArrowLeft aria-hidden size={16} /> Back to history
-      </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button variant="ghost" className="-ml-2" onClick={() => openRun(null)}>
+          <ArrowLeft aria-hidden size={16} /> Back to history
+        </Button>
+        <Button
+          disabled={!summary}
+          title="Download the rows that pass the execution log's filters, as a PAD CSV"
+          onClick={exportCsv}
+        >
+          <Download aria-hidden size={16} /> Export filtered CSV
+        </Button>
+      </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <DisplayName key={run.displayName} run={run} />
         <StatusPill status={run.overallStatus} />

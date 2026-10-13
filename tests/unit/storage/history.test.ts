@@ -7,6 +7,7 @@ import {
   getRun,
   listAnnotations,
   listRuns,
+  replaceRowAnnotations,
   saveRun,
   updateRun,
 } from '../../../src/core/storage/history.ts'
@@ -103,6 +104,36 @@ describe('annotations', () => {
     expect(list[0]).toMatchObject({ runId: A.id, logIndex: 4, kind: 'bookmark' })
     expect(list[1]).toMatchObject({ kind: 'note', text: 'run note' })
     expect(list[1]).not.toHaveProperty('logIndex')
+  })
+})
+
+describe('replaceRowAnnotations', () => {
+  const t = '2026-10-13T09:00:00.000Z'
+
+  it("replaces one row's annotations and leaves other rows, runs and run notes alone", async () => {
+    await addAnnotation(db, { runId: A.id, logIndex: 4, kind: 'note', text: 'old', createdAt: t })
+    await addAnnotation(db, { runId: A.id, logIndex: 9, kind: 'bookmark', text: '', createdAt: t })
+    await addAnnotation(db, { runId: A.id, kind: 'note', text: 'run note', createdAt: t })
+    await addAnnotation(db, { runId: B.id, logIndex: 4, kind: 'note', text: 'B', createdAt: t })
+
+    const list = await replaceRowAnnotations(db, A.id, 4, [
+      { kind: 'bookmark', text: '', createdAt: t },
+      { kind: 'note', text: 'new', createdAt: t },
+    ])
+    expect(list).toEqual(await listAnnotations(db, A.id))
+    expect(list.map((a) => [a.logIndex, a.kind, a.text])).toEqual([
+      [9, 'bookmark', ''],
+      [undefined, 'note', 'run note'],
+      [4, 'bookmark', ''],
+      [4, 'note', 'new'],
+    ])
+    expect(list.every((a) => a.runId === A.id && typeof a.id === 'number')).toBe(true)
+    expect((await listAnnotations(db, B.id)).map((a) => a.text)).toEqual(['B'])
+  })
+
+  it("clears a row's annotations when given none", async () => {
+    await addAnnotation(db, { runId: A.id, logIndex: 4, kind: 'note', text: 'old', createdAt: t })
+    expect(await replaceRowAnnotations(db, A.id, 4, [])).toEqual([])
   })
 })
 

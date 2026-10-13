@@ -90,3 +90,23 @@ export async function listAnnotations(db: PadDb, runId: string): Promise<Annotat
   const list = await db.getAllFromIndex('annotations', 'runId', runId)
   return list.sort((a, b) => a.id! - b.id!)
 }
+
+/**
+ * Replaces one row's annotations (bookmark, note) in one transaction and returns the run's
+ * annotations. Other rows, other runs and run-level annotations are left alone.
+ */
+export async function replaceRowAnnotations(
+  db: PadDb,
+  runId: string,
+  logIndex: number,
+  next: readonly Pick<Annotation, 'kind' | 'text' | 'createdAt'>[],
+): Promise<Annotation[]> {
+  const tx = db.transaction('annotations', 'readwrite')
+  const store = tx.objectStore('annotations')
+  for (const a of await store.index('runId').getAll(runId)) {
+    if (a.logIndex === logIndex) await store.delete(a.id!)
+  }
+  for (const a of next) await store.add({ runId, logIndex, ...a } as Annotation)
+  await tx.done
+  return listAnnotations(db, runId)
+}

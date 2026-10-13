@@ -1,2 +1,2 @@
-// Errors: ErrorList with context rows.
-export {}
+// Errors: each failure with the rows before it.
+export { ErrorsTab } from './ErrorsTab.tsx'

@@ -32,3 +32,26 @@ export function buildVariableIndex(
   }
   return index
 }
+
+export interface VariableSummary {
+  name: string
+  count: number
+  first: Assignment
+  last: Assignment
+}
+
+/** Variables in order of first assignment, filtered by name (case-insensitive). */
+export function variableSummaries(index: VariableIndex, query = ''): VariableSummary[] {
+  const q = query.trim().toLowerCase()
+  const list: VariableSummary[] = []
+  for (const [name, assignments] of index) {
+    if (q && !name.toLowerCase().includes(q)) continue
+    list.push({
+      name,
+      count: assignments.length,
+      first: assignments[0]!,
+      last: assignments.at(-1)!,
+    })
+  }
+  return list
+}

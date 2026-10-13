@@ -1,9 +1,10 @@
 import { useStore } from '../../app/store.ts'
+import { ErrorsTab } from '../errors/index.ts'
 import { LogView } from '../log/index.ts'
 import { OverviewTab } from '../overview/index.ts'
+import { VariablesTab } from '../variables/index.ts'
 import { RunHeader } from './RunHeader.tsx'
 import { RunTabs } from './RunTabs.tsx'
-import { TABS } from './tabs.ts'
 
 /** Run view: header, tabs and the selected tab's panel. */
 export function RunScreen({ id }: { id: string }) {
@@ -23,7 +24,6 @@ export function RunScreen({ id }: { id: string }) {
     )
   }
   const derived = active?.id === id && active.status === 'ready' ? active.derived : undefined
-  const label = TABS.find((t) => t.id === tab)!.label
 
   return (
     <div className="space-y-4">
@@ -40,8 +40,10 @@ export function RunScreen({ id }: { id: string }) {
           <OverviewTab run={derived} />
         ) : tab === 'log' ? (
           <LogView run={derived} />
+        ) : tab === 'variables' ? (
+          <VariablesTab run={derived} />
         ) : (
-          <p className="text-sm text-muted">The {label} view is not built yet.</p>
+          <ErrorsTab run={derived} />
         )}
       </div>
     </div>
