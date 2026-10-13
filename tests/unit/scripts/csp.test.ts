@@ -38,6 +38,22 @@ describe('inlineHashes', () => {
 })
 
 describe('externalReferences', () => {
+  it('checks every srcset candidate, not only the first', () => {
+    const html = PAGE.replace(
+      '<title>',
+      '<img srcset="data:image/png;base64,AA 1x, https://x.example/b.png 2x"><title>',
+    )
+    expect(externalReferences(html)).toEqual(['https://x.example/b.png'])
+  })
+
+  it('reports namespaced xlink:href in SVG', () => {
+    const html = PAGE.replace(
+      '<title>',
+      '<svg><use xlink:href="https://x.example/s.svg#i"></use><use xlink:href="#local"></use></svg><title>',
+    )
+    expect(externalReferences(html)).toEqual(['https://x.example/s.svg#i'])
+  })
+
   it('also reports srcset, poster, object data and form action, but not data-* attributes', () => {
     const html = PAGE.replace(
       '<title>',
@@ -46,7 +62,8 @@ describe('externalReferences', () => {
         '<div data-testid="run" data="data:,ok"></div><title>',
     )
     expect(externalReferences(html)).toEqual([
-      'a.png 1x, b.png 2x',
+      'a.png',
+      'b.png',
       'p.jpg',
       'https://x.example/o.swf',
       '/submit',
