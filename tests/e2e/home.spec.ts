@@ -35,6 +35,26 @@ async function drop(page: Page, files: DropFile[]) {
 
 const cards = (page: Page) => page.getByTestId('history').getByRole('listitem')
 
+/** Reads one value from the app's IndexedDB settings store. */
+function storedSetting(page: Page, key: string) {
+  return page.evaluate(
+    (k) =>
+      new Promise<unknown>((resolve, reject) => {
+        const open = indexedDB.open('pad-log-viewer')
+        open.onerror = () => reject(open.error)
+        open.onsuccess = () => {
+          const get = open.result.transaction('settings').objectStore('settings').get(k)
+          get.onsuccess = () => {
+            resolve(get.result)
+            open.result.close()
+          }
+          get.onerror = () => reject(get.error)
+        }
+      }),
+    key,
+  )
+}
+
 test.beforeEach(async ({ page }) => {
   // Headless Chromium may grant persistence; make the storage warning deterministic.
   await page.addInitScript(() => {
@@ -158,6 +178,8 @@ test.describe('theme', () => {
   }) => {
     await page.getByRole('button', { name: 'Switch to light theme' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+    // The settings-store copy is written in the background; wait for it before clearing.
+    await expect.poll(() => storedSetting(page, 'theme')).toBe('light')
     await page.evaluate(() => localStorage.clear())
     await page.reload()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
@@ -196,6 +218,27 @@ test.describe('storage', () => {
     await other.getByTestId('workspace-input').setInputFiles(path)
     await expect(cards(other)).toHaveCount(2)
     await other.close()
+  })
+
+  test('still loads history when the settings store cannot be written (e.g. storage full)', async ({
+    page,
+  }) => {
+    await drop(page, [fixture(NESTED)])
+    await expect(cards(page)).toHaveCount(1)
+    await page.getByRole('button', { name: 'Switch to light theme' }).click()
+    await page.addInitScript(() => {
+      const put = IDBObjectStore.prototype.put
+      IDBObjectStore.prototype.put = function (...args: Parameters<typeof put>) {
+        if (this.name === 'settings') throw new DOMException('Quota exceeded', 'QuotaExceededError')
+        return put.apply(this, args)
+      }
+    })
+    await page.reload()
+    await expect(cards(page)).toHaveCount(1)
+    await page.getByRole('button', { name: 'Switch to dark theme' }).click()
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+    await drop(page, [fixture(REAL)])
+    await expect(cards(page)).toHaveCount(2)
   })
 
   test('works as a session-only viewer when IndexedDB is unavailable', async ({ page }) => {

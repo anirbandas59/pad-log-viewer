@@ -132,7 +132,8 @@ export const useStore = create<State>()((set, get) => {
 
     init() {
       initializing ??= (async () => {
-        applyTheme(get().theme)
+        const startTheme = get().theme
+        applyTheme(startTheme)
         let db: PadDb | null = null
         try {
           db = await openDb()
@@ -144,15 +145,23 @@ export const useStore = create<State>()((set, get) => {
         })
         let bannerDismissed = false
         if (db) {
-          bannerDismissed = (await getSetting<boolean>(db, STORAGE_WARNING_DISMISSED)) === true
-          // localStorage is the authority; the stored copy only fills in when it is empty.
-          const saved = await getSetting(db, THEME_SETTING)
-          if (readLocalTheme() === null && isTheme(saved)) {
-            applyTheme(saved)
-            saveLocalTheme(saved)
-            set({ theme: saved })
-          } else {
-            await setSetting(db, THEME_SETTING, get().theme)
+          // Settings are best effort: a failed read or write (e.g. storage full) must not
+          // stop history from loading.
+          try {
+            bannerDismissed = (await getSetting<boolean>(db, STORAGE_WARNING_DISMISSED)) === true
+            // localStorage is the authority; the stored copy fills in only when it is empty
+            // and the user has not toggled the theme while the database was opening.
+            const saved = await getSetting(db, THEME_SETTING)
+            const theme = get().theme
+            if (readLocalTheme() === null && theme === startTheme && isTheme(saved)) {
+              applyTheme(saved)
+              saveLocalTheme(saved)
+              set({ theme: saved })
+            } else if (saved !== theme) {
+              await setSetting(db, THEME_SETTING, theme)
+            }
+          } catch {
+            // Keep the defaults.
           }
         }
         set({ db, health, bannerDismissed, ready: true })
@@ -331,7 +340,8 @@ export const useStore = create<State>()((set, get) => {
     async dismissBanner() {
       set({ bannerDismissed: true })
       const { db } = get()
-      if (db) await setSetting(db, STORAGE_WARNING_DISMISSED, true)
+      // Best effort: the banner stays hidden for this session even if this is not saved.
+      if (db) await setSetting(db, STORAGE_WARNING_DISMISSED, true).catch(() => {})
     },
 
     setQuery(query) {
@@ -344,7 +354,7 @@ export const useStore = create<State>()((set, get) => {
       saveLocalTheme(theme)
       set({ theme })
       const { db } = get()
-      if (db) void setSetting(db, THEME_SETTING, theme)
+      if (db) setSetting(db, THEME_SETTING, theme).catch(() => {})
     },
 
     openRun(id) {
