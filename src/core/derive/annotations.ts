@@ -1,5 +1,4 @@
 // Bookmarks and notes on log rows.
-/* eslint-disable @typescript-eslint/no-unused-vars -- M7 stubs until the implementation lands */
 import type { Annotation } from '../model/types.ts'
 
 export interface RowMark {
@@ -7,16 +6,43 @@ export interface RowMark {
   note: string
 }
 
+/** One row's annotation as stored, without its id, run and row. */
 export type RowAnnotation = Pick<Annotation, 'kind' | 'text' | 'createdAt'>
 
-export function rowMarks(_list: readonly Annotation[]): Map<number, RowMark> {
-  throw new Error('not implemented')
+/** Log index → bookmark and note. Run-level annotations are skipped; the latest note wins. */
+export function rowMarks(list: readonly Annotation[]): Map<number, RowMark> {
+  const marks = new Map<number, RowMark>()
+  for (const a of list) {
+    if (a.logIndex === undefined) continue
+    const mark = marks.get(a.logIndex) ?? { bookmarked: false, note: '' }
+    if (a.kind === 'bookmark') mark.bookmarked = true
+    else mark.note = a.text
+    marks.set(a.logIndex, mark)
+  }
+  return marks
 }
 
+/**
+ * A row's annotations after a change: a bookmark if it is bookmarked, a note if the note
+ * has any text. What the change leaves alone keeps its original time.
+ */
 export function nextRowAnnotations(
-  _current: readonly Annotation[],
-  _change: Partial<RowMark>,
-  _now: string,
+  current: readonly Annotation[],
+  change: Partial<RowMark>,
+  now: string,
 ): RowAnnotation[] {
-  throw new Error('not implemented')
+  const bookmark = current.find((a) => a.kind === 'bookmark')
+  const note = current.findLast((a) => a.kind === 'note')
+  const bookmarked = change.bookmarked ?? bookmark !== undefined
+  const text = change.note ?? note?.text ?? ''
+  const next: RowAnnotation[] = []
+  if (bookmarked) next.push({ kind: 'bookmark', text: '', createdAt: bookmark?.createdAt ?? now })
+  if (text.trim()) {
+    next.push({
+      kind: 'note',
+      text,
+      createdAt: note && note.text === text ? note.createdAt : now,
+    })
+  }
+  return next
 }

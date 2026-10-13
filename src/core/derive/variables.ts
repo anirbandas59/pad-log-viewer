@@ -1,5 +1,4 @@
 // Variable assignment index.
-/* eslint-disable @typescript-eslint/no-unused-vars -- M7 stubs until the implementation lands */
 import type { LogRow } from '../model/types.ts'
 
 export interface Assignment {
@@ -41,6 +40,18 @@ export interface VariableSummary {
   last: Assignment
 }
 
-export function variableSummaries(_index: VariableIndex, _query = ''): VariableSummary[] {
-  throw new Error('not implemented')
+/** Variables in order of first assignment, filtered by name (case-insensitive). */
+export function variableSummaries(index: VariableIndex, query = ''): VariableSummary[] {
+  const q = query.trim().toLowerCase()
+  const list: VariableSummary[] = []
+  for (const [name, assignments] of index) {
+    if (q && !name.toLowerCase().includes(q)) continue
+    list.push({
+      name,
+      count: assignments.length,
+      first: assignments[0]!,
+      last: assignments.at(-1)!,
+    })
+  }
+  return list
 }

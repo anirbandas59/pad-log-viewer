@@ -99,10 +99,7 @@ describe('rowsToCsv', () => {
   })
 
   it('writes only the header for no rows', () => {
-    const parsed = parseCsv(rowsToCsv([]))
-    if (!parsed.ok) throw new Error(parsed.error.message)
-    expect(parsed.headers).toEqual([...EXPORT_HEADERS])
-    expect(parsed.rows).toEqual([])
+    expect(rowsToCsv([])).toBe(`\uFEFFsep=,\r\n${EXPORT_HEADERS.join(',')}\r\n`)
   })
 })
 

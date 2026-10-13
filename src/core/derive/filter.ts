@@ -1,5 +1,4 @@
 // Execution-log filters: search, facets, Errors only and Hide noise.
-/* eslint-disable @typescript-eslint/no-unused-vars -- M7 stubs until the implementation lands */
 import type { LogRow } from '../model/types.ts'
 
 export type RowStatusKind = 'Succeeded' | 'Failed' | 'Warning' | 'Unknown'
@@ -27,6 +26,7 @@ export const EMPTY_FILTERS: LogFilters = {
 
 type Row = Pick<
   LogRow,
+  | 'logIndex'
   | 'status'
   | 'level'
   | 'isFailure'
@@ -54,13 +54,13 @@ export function isNoise(row: Pick<LogRow, 'module' | 'action'>): boolean {
 
 /**
  * Rows matching every active filter, in their original order: AND across facets and
- * toggles, OR within a facet. Search terms are matched against the precomputed,
+ * toggles, OR within a facet. "Bookmarked only" keeps the Log indexes in `bookmarked`. Search terms are matched against the precomputed,
  * lower-cased `searchText`.
  */
 export function filterRows<T extends Row>(
   rows: readonly T[],
   filters: LogFilters,
-  _bookmarked: ReadonlySet<number> = new Set(),
+  bookmarked: ReadonlySet<number> = new Set(),
 ): T[] {
   const terms = filters.text.toLowerCase().split(/\s+/).filter(Boolean)
   const subflows = filters.subflows.length ? new Set(filters.subflows) : null
@@ -72,13 +72,15 @@ export function filterRows<T extends Row>(
     !statuses &&
     !modules &&
     !filters.errorsOnly &&
-    !filters.hideNoise
+    !filters.hideNoise &&
+    !filters.bookmarkedOnly
   ) {
     return [...rows]
   }
   return rows.filter(
     (row) =>
       (!filters.errorsOnly || row.isFailure) &&
+      (!filters.bookmarkedOnly || bookmarked.has(row.logIndex)) &&
       (!filters.hideNoise || !isNoise(row)) &&
       (!subflows || subflows.has(row.subflow)) &&
       (!modules || modules.has(row.moduleDisplay)) &&
@@ -95,6 +97,7 @@ export function activeFilterCount(filters: LogFilters): number {
     filters.statuses.length +
     filters.modules.length +
     (filters.errorsOnly ? 1 : 0) +
-    (filters.hideNoise ? 1 : 0)
+    (filters.hideNoise ? 1 : 0) +
+    (filters.bookmarkedOnly ? 1 : 0)
   )
 }

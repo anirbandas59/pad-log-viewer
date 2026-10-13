@@ -1,5 +1,4 @@
 // Save, list and delete runs.
-/* eslint-disable @typescript-eslint/no-unused-vars -- M7 stubs until the implementation lands */
 import type { Annotation, RunMeta } from '../model/types.ts'
 import type { PadDb } from './db.ts'
 
@@ -92,11 +91,22 @@ export async function listAnnotations(db: PadDb, runId: string): Promise<Annotat
   return list.sort((a, b) => a.id! - b.id!)
 }
 
+/**
+ * Replaces one row's annotations (bookmark, note) in one transaction and returns the run's
+ * annotations. Other rows, other runs and run-level annotations are left alone.
+ */
 export async function replaceRowAnnotations(
-  _db: PadDb,
-  _runId: string,
-  _logIndex: number,
-  _next: readonly Pick<Annotation, 'kind' | 'text' | 'createdAt'>[],
+  db: PadDb,
+  runId: string,
+  logIndex: number,
+  next: readonly Pick<Annotation, 'kind' | 'text' | 'createdAt'>[],
 ): Promise<Annotation[]> {
-  throw new Error('not implemented')
+  const tx = db.transaction('annotations', 'readwrite')
+  const store = tx.objectStore('annotations')
+  for (const a of await store.index('runId').getAll(runId)) {
+    if (a.logIndex === logIndex) await store.delete(a.id!)
+  }
+  for (const a of next) await store.add({ runId, logIndex, ...a } as Annotation)
+  await tx.done
+  return listAnnotations(db, runId)
 }

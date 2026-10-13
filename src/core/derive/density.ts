@@ -1,9 +1,10 @@
 // Execution-log row density.
-/* eslint-disable @typescript-eslint/no-unused-vars -- M7 stubs until the implementation lands */
 export type Density = 'comfortable' | 'compact'
 
-export const ROW_HEIGHT: Record<Density, number> = { comfortable: 0, compact: 0 }
+/** Table row height in px for each density (architecture: Visual system). */
+export const ROW_HEIGHT: Record<Density, number> = { comfortable: 40, compact: 28 }
 
-export function readDensity(_stored: unknown): Density {
-  throw new Error('not implemented')
+/** The density saved in settings; anything else is comfortable. */
+export function readDensity(stored: unknown): Density {
+  return stored === 'compact' ? 'compact' : 'comfortable'
 }
