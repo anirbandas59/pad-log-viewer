@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { classifyDrop, contentRunId, ingestCsv } from '../../../src/core/model/ingest.ts'
+import {
+  classifyDrop,
+  contentRunId,
+  ingestCsv,
+  mergeReplace,
+} from '../../../src/core/model/ingest.ts'
 import { NESTED_FIXTURE, REAL_FIXTURE } from '../helpers/fixtures.ts'
 import { makeMeta } from '../helpers/storage.ts'
 import { HEADERS, row, toCsv } from '../helpers/syntheticLog.ts'
@@ -122,5 +127,30 @@ describe('classifyDrop', () => {
   it('treats a content id match as the same export', () => {
     const local = makeMeta({ id: 'local-00aa', exportedAt: null })
     expect(classifyDrop({ ...local }, [local]).kind).toBe('sameExport')
+  })
+})
+
+describe('mergeReplace', () => {
+  it("takes the re-export's data but keeps the user's display name and tags", () => {
+    const stored = makeMeta({
+      id: 'g1',
+      exportedAt: 'old',
+      displayName: 'Month-end run',
+      tags: ['prod', 'ticket-42'],
+      rowCount: 3,
+    })
+    const incoming = makeMeta({
+      id: 'g1',
+      exportedAt: 'new',
+      displayName: 'Invoice_Main',
+      tags: [],
+      rowCount: 9,
+      importedAt: '2026-10-14T00:00:00.000Z',
+    })
+    expect(mergeReplace(stored, incoming)).toEqual({
+      ...incoming,
+      displayName: 'Month-end run',
+      tags: ['prod', 'ticket-42'],
+    })
   })
 })

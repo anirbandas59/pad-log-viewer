@@ -83,3 +83,8 @@ export function classifyDrop(meta: RunMeta, existing: readonly RunMeta[]): DropD
   if (!match) return { kind: 'new' }
   return { kind: match.exportedAt === meta.exportedAt ? 'sameExport' : 'reExport', existing: match }
 }
+
+/** A re-export replacing a stored run: the new export's data, the user's name and tags. */
+export function mergeReplace(existing: RunMeta, incoming: RunMeta): RunMeta {
+  return { ...incoming, displayName: existing.displayName, tags: existing.tags }
+}

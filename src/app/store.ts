@@ -16,7 +16,7 @@ import {
   workspaceFileName,
   type WorkspaceBundle,
 } from '../core/storage/workspace.ts'
-import { classifyDrop, ingestCsv, type IngestedRun } from '../core/model/ingest.ts'
+import { classifyDrop, ingestCsv, mergeReplace, type IngestedRun } from '../core/model/ingest.ts'
 import type { HistoryQuery } from '../core/model/historyView.ts'
 import type { RunMeta } from '../core/model/types.ts'
 import { downloadText } from './download.ts'
@@ -57,6 +57,8 @@ interface State {
   confirm: Confirm | null
   query: HistoryQuery
   theme: Theme
+  /** The user toggled the theme in this session, so a stored theme must not override it. */
+  themeChosen: boolean
   activeRunId: string | null
 
   init(): Promise<void>
@@ -120,6 +122,7 @@ export const useStore = create<State>()((set, get) => {
     confirm: null,
     query: { text: '', status: 'all', tag: null, sort: 'imported' },
     theme: readStoredTheme(),
+    themeChosen: false,
     activeRunId: null,
 
     init() {
@@ -138,7 +141,7 @@ export const useStore = create<State>()((set, get) => {
         if (db) {
           bannerDismissed = (await getSetting<boolean>(db, STORAGE_WARNING_DISMISSED)) === true
           const saved = await getSetting(db, THEME_SETTING)
-          if (isTheme(saved) && saved !== get().theme) {
+          if (isTheme(saved) && saved !== get().theme && !get().themeChosen) {
             applyTheme(saved)
             set({ theme: saved })
           }
@@ -163,8 +166,20 @@ export const useStore = create<State>()((set, get) => {
           notify({ kind: 'error', fileName: result.fileName, message: result.error })
           continue
         }
-        const pending = get().replacePrompts.map((p) => p.run.meta)
-        const decision = classifyDrop(result.run.meta, [...get().runs, ...pending])
+        const { id, exportedAt } = result.run.meta
+        if (
+          get().replacePrompts.some(
+            (p) => p.run.meta.id === id && p.run.meta.exportedAt === exportedAt,
+          )
+        ) {
+          notify({
+            kind: 'info',
+            fileName: file.name,
+            message: `${file.name} is already waiting for your answer on whether to replace the stored run.`,
+          })
+          continue
+        }
+        const decision = classifyDrop(result.run.meta, get().runs)
         if (decision.kind === 'sameExport') {
           notify({
             kind: 'info',
@@ -194,11 +209,7 @@ export const useStore = create<State>()((set, get) => {
       set({ replacePrompts: rest })
       if (!prompt || !replace) return
       // The user's own edits to the stored run survive a replace.
-      const meta: RunMeta = {
-        ...prompt.run.meta,
-        displayName: prompt.existing.displayName,
-        tags: prompt.existing.tags,
-      }
+      const meta = mergeReplace(prompt.existing, prompt.run.meta)
       try {
         await store({ ...prompt.run, meta })
       } catch (err) {
@@ -321,7 +332,7 @@ export const useStore = create<State>()((set, get) => {
     toggleTheme() {
       const theme: Theme = get().theme === 'dark' ? 'light' : 'dark'
       applyTheme(theme)
-      set({ theme })
+      set({ theme, themeChosen: true })
       const { db } = get()
       if (db) void setSetting(db, THEME_SETTING, theme)
     },
