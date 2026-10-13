@@ -187,7 +187,7 @@ Agents decide routine engineering matters themselves and stop for anything that 
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Cloud network blocks Playwright's browser download | E2E tests can't run in cloud sessions | Cloud runs unit tests only; e2e runs in GitHub Actions CI and locally |
+| Cloud network blocks Playwright's browser download | E2E tests can't run in cloud sessions | Cloud runs unit tests only; e2e runs in the CI `e2e` job (from 2026-10-13, ahead of M8) and locally |
 | Stop hook keeps failing | Session loops and burns usage | 3-failure cap, then the session stops and reports |
 | Auto-fix misreads a review comment | Wrong fix, extra rounds | Reviewer cites `file:line` and the expected behaviour; 3-round limit |
 | Developer and reviewer share blind spots | Bugs pass review | Reviewer works from the acceptance-criteria checklist, runs at higher effort, and you check UI screenshots in the PR |

@@ -149,6 +149,9 @@ test.describe('storage', () => {
     await expect(banner.getByRole('button', { name: 'Export now' })).toBeEnabled()
     await banner.getByRole('button', { name: "Don't show again" }).click()
     await expect(banner).toHaveCount(0)
+    // The banner hides at once; the setting is written to IndexedDB just after. Reloading
+    // before that write commits would bring the banner back, so wait for it.
+    await expect.poll(() => storedSetting(page, 'storageWarningDismissed')).toBe(true)
     await page.reload()
     await expect(page.getByRole('heading', { name: 'PAD Log Viewer' })).toBeVisible()
     await expect(banner).toHaveCount(0)
