@@ -4,6 +4,11 @@
 //
 // Writes the sanitized CSV under --out-dir with the run GUID replaced in its name,
 // prints replacement counts, and exits non-zero if any known secret survives.
+// Exports of the same flow must use the same --terms list, covering every written form of the
+// process and project names (with a space, with an underscore, with a queue prefix, and each
+// distinctive part on its own): the sanitizer only learns names from the data each file
+// contains, so a name hidden in one export can otherwise appear in another and let the two be
+// compared to reverse pseudonyms.
 // Always read the output before committing it: free-text names the sanitizer
 // cannot recognise must be passed with --terms. Names it learns automatically
 // (from paths, accounts, e-mails, hosts) are only tracked when 3+ characters

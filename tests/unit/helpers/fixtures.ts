@@ -7,6 +7,8 @@ export const NESTED_FIXTURE =
   'tests/fixtures/synthetic/Nested_Blocks-1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d-20261013T090000Z.csv'
 export const REAL_FIXTURE =
   'tests/fixtures/real/Invoice_Extraction_Main-00000000-0000-4000-8000-000000000007-20261012T113808Z.csv'
+export const REAL_FAILED_FIXTURE =
+  'tests/fixtures/real/Invoice_Extraction_Main-00000000-0000-4000-8000-000000000002-20261013T151558Z.csv'
 
 export function loadRun(path: string): NormalizedRun {
   const parsed = parseCsv(readFileSync(path, 'utf8'))

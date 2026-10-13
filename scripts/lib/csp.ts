@@ -11,9 +11,10 @@ export interface InlineHashes {
 
 const SCRIPT = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi
 const STYLE = /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi
-// Attributes that make the browser load or submit to a URL. `data` is <object data>, never data-*.
+// Attributes that make the browser load or submit to a URL. `data` is <object data>, never
+// data-*; `xlink:href` is SVG's namespaced form of href.
 const URL_ATTR =
-  /\s(?:src|href|srcset|poster|data|action)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
+  /\s(?:xlink:)?(src|href|srcset|poster|data|action)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
 
 const hash = (text: string) =>
   `'sha256-${createHash('sha256').update(text, 'utf8').digest('base64')}'`
@@ -28,17 +29,43 @@ export function inlineHashes(html: string): InlineHashes {
 }
 
 /**
- * Every `src`/`href` in the page's tags that would load something: anything but a `data:`
- * URI or an in-page `#` link. Script and style bodies are skipped, since text inside them is
- * not markup.
+ * The candidate URLs of a srcset, parsed as the HTML standard does: a URL runs to the next
+ * whitespace (trailing commas trimmed), and its descriptors run to the next comma. So
+ * "a 1x,https://b 2x" is two candidates, while a data: URI's own comma stays inside its URL.
+ */
+function srcsetUrls(srcset: string): string[] {
+  const urls: string[] = []
+  let i = 0
+  while (i < srcset.length) {
+    while (i < srcset.length && /[\s,]/.test(srcset[i]!)) i++
+    let j = i
+    while (j < srcset.length && !/\s/.test(srcset[j]!)) j++
+    let url = srcset.slice(i, j)
+    i = j
+    if (url.endsWith(',')) {
+      url = url.replace(/,+$/, '')
+    } else {
+      while (i < srcset.length && srcset[i] !== ',') i++
+    }
+    if (url) urls.push(url)
+  }
+  return urls
+}
+
+/**
+ * Every URL in the page's tags that would load or submit something: `src`, `href` (and SVG
+ * `xlink:href`), each `srcset` candidate, `poster`, `<object data>` and `<form action>`, except
+ * `data:` URIs and in-page `#` links. Script and style bodies are skipped, since text inside
+ * them is not markup.
  */
 export function externalReferences(html: string): string[] {
   const markup = html.replace(SCRIPT, '<script$1></script>').replace(STYLE, '<style></style>')
   const refs: string[] = []
   for (const tag of markup.match(/<[a-z][^>]*>/gi) ?? []) {
     for (const m of tag.matchAll(URL_ATTR)) {
-      const url = (m[1] ?? m[2] ?? m[3] ?? '').trim()
-      if (!/^(data:|#)/i.test(url)) refs.push(url)
+      const value = (m[2] ?? m[3] ?? m[4] ?? '').trim()
+      const urls = m[1]!.toLowerCase() === 'srcset' ? srcsetUrls(value) : [value]
+      for (const url of urls) if (url && !/^(data:|#)/i.test(url)) refs.push(url)
     }
   }
   return refs

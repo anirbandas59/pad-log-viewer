@@ -1,7 +1,7 @@
 {
   "name": "pad-log-viewer",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Single-file HTML viewer for Power Automate Desktop run-log CSVs",
   "type": "module",
   "engines": {
@@ -22,14 +22,12 @@
     "sanitize": "node scripts/sanitize-log.ts"
   },
   "dependencies": {
-    "@tanstack/react-table": "9.2.8",
     "@tanstack/react-virtual": "3.14.17",
     "idb": "8.0.4",
     "lucide-react": "1.55.0",
     "papaparse": "5.7.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "recharts": "3.10.1",
     "zustand": "5.0.15"
   },
   "devDependencies": {

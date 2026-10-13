@@ -45,7 +45,9 @@ Nothing is installed and nothing needs a server, Node or admin rights.
 
 ## What's new
 
-### Unreleased (v1 candidate)
+### v1.0.0
+
+First release.
 
 - Home: drop several CSVs, history with search, status filter and rename, storage warning, workspace export and import.
 - Run view: Overview, Execution log (virtualized for 10,000+ rows, filters, columns, keyboard), row details with notes and bookmarks, Variables, Errors, Export filtered CSV, compact rows.
@@ -70,4 +72,4 @@ Work happens one milestone per branch and PR into `dev`; see [CLAUDE.md](CLAUDE.
 
 ## Releasing
 
-Follow the release checklist in [CLAUDE.md](CLAUDE.md): bump `version` in `package.json`, update [What's new](#whats-new), open `dev` → `main` as `chore(release): vX.Y.Z`, then tag `vX.Y.Z` on `main`. The release workflow builds `pad-log-viewer-vX.Y.Z.html` and attaches it to the GitHub release. Check the file on a locked-down machine and in Edge from `file://` before announcing it.
+Follow the release checklist in [CLAUDE.md](CLAUDE.md): bump `version` in `package.json`, update [What's new](#whats-new), open `dev` → `main` as `chore(release): vX.Y.Z`, then tag `vX.Y.Z` on `main`. The release workflow (tags on `main` only) builds `pad-log-viewer-vX.Y.Z.html` and attaches it to the GitHub release, plus `pad-log-viewer-vX.Y.Z.zip` holding the same file. Check the file on a locked-down machine and in Edge from `file://` before announcing it.
