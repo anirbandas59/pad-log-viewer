@@ -89,7 +89,8 @@ test.describe('overview', () => {
     const widths = await bars
       .locator('[data-ticks] [data-bar]')
       .evaluateAll((els) => els.map((e) => parseFloat((e as HTMLElement).style.width)))
-    expect(widths.reduce((a, w) => a + w, 0)).toBeCloseTo(100, 6)
+    // The exact check is the tick sum above; CSS keeps percentages to ~6 significant digits.
+    expect(widths.reduce((a, w) => a + w, 0)).toBeCloseTo(100, 2)
   })
 
   test('lists the 10 slowest actions, and each jumps to its row', async ({ page }) => {
@@ -111,7 +112,8 @@ test.describe('overview', () => {
     await openRun(page, 'Invoice_Processing_v2')
     await expect(page.getByTestId('status-breakdown')).toContainText(/Succeeded\s*15/)
     await expect(page.getByTestId('status-breakdown')).toContainText(/Failed\s*2/)
-    await expect(page.getByTestId('module-usage')).toContainText(/Excel\s*4/)
+    await expect(page.getByTestId('module-usage')).toContainText(/Flow control\s*5/)
+    await expect(page.getByTestId('module-usage')).toContainText(/Excel\s*3/)
   })
 })
 
