@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatBytes, formatDuration } from '../../../src/core/model/format.ts'
+import { formatBytes, formatDuration, formatOffset } from '../../../src/core/model/format.ts'
 
 describe('formatDuration', () => {
   it.each([
@@ -33,5 +33,18 @@ describe('formatBytes', () => {
     [1_181_116_006, '1.1 GB'],
   ])('%s → %s', (bytes, text) => {
     expect(formatBytes(bytes)).toBe(text)
+  })
+})
+
+describe('formatOffset', () => {
+  it.each([
+    [0n, '+00:00.000'],
+    [2_790_000n, '+00:00.279'],
+    [123_459_999n, '+00:12.345'],
+    [1_357_370_000n, '+02:15.737'],
+    [37_230_040_000n, '+1:02:03.004'],
+    [-10_000n, '-00:00.001'],
+  ])('%s ticks → %s', (ticks, text) => {
+    expect(formatOffset(ticks)).toBe(text)
   })
 })

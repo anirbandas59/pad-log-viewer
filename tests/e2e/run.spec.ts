@@ -2,17 +2,12 @@
 // the run duration.
 import { expect, test, type Page } from '@playwright/test'
 import { syntheticRun, toCsv } from '../unit/helpers/syntheticLog.ts'
-import { FAILED, REAL, cards, drop, fixture, openApp } from './helpers.ts'
+import { FAILED, REAL, cards, drop, fixture, openApp, openRun } from './helpers.ts'
 
 // 3,000 rows; failures at Log index 997, 1994 and 2991 (every 997th row).
 const LONG = {
   name: 'Long_Run-2b3c4d5e-6f70-4a8b-9c0d-1e2f3a4b5c6d-20261013T100000Z.csv',
   text: toCsv(syntheticRun(3000)),
-}
-
-async function openRun(page: Page, name: string) {
-  await cards(page).filter({ hasText: name }).getByRole('button', { name, exact: true }).click()
-  await expect(page.getByTestId('run-header')).toContainText(name)
 }
 
 const tab = (page: Page, name: string) => page.getByRole('tab', { name })
