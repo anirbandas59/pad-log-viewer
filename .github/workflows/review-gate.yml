@@ -2,8 +2,10 @@ name: Review gate
 
 # Branch protection is unavailable on this plan, so nothing blocks a merge. This check goes red
 # unless the reviewer approved the exact commit being merged, so an unapproved PR shows a red ✗
-# next to the merge button. It reads labels, head and reviews live from the API (not from the
-# event payload), so re-running an old run judges the current state.
+# next to the merge button. It reads the head and reviews live from the API (not from the
+# event payload), so re-running an old run judges the current state. It does not require the
+# `approved` label: review-pr posts the review before relabelling, so a label check would fail
+# the run triggered by the review itself. The APPROVE review of the head is the stronger signal.
 on:
   pull_request:
     types: [opened, reopened, synchronize, labeled, unlabeled]
@@ -14,7 +16,8 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: review-gate-${{ github.event.pull_request.number }}
+  # Per event type, so a labeled run cannot cancel the run triggered by the review.
+  group: review-gate-${{ github.event.pull_request.number }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -63,9 +66,7 @@ jobs:
           if (EVENT_HEAD_SHA && EVENT_HEAD_SHA !== head) {
             fail(`This run is for ${EVENT_HEAD_SHA}, but the PR head is now ${head}; see the newer run.`)
           }
-          const labels = pr.labels.map((l) => l.name)
-          console.log(`Head: ${head}\nLabels: ${labels.join(', ') || 'none'}`)
-          if (!labels.includes('approved')) fail("The PR does not have the 'approved' label.")
+          console.log(`Head: ${head}`)
 
           const reviews = (await all(`pulls/${PR}/reviews`)).filter((r) => r.user?.login === REVIEWER)
           const latest = reviews.at(-1)
