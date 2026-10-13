@@ -182,7 +182,7 @@ Default format: `<flow-name>_<guid>_<export-timestamp>.csv`.
 - **Quoting:** RFC 4180; embedded quotes are doubled (`""`).
 - **Encoding:** UTF-8 with optional BOM; non-ASCII (for example CJK file paths) must survive round-trip.
 - **Inputs/Outputs:** JSON inside a CSV field. Each parameter is `{ localizedName, value, variableName }`. Parse failure keeps the raw string and flags the row.
-- **Timestamps:** 7 fractional digits (.NET ticks). JavaScript `Date` keeps only milliseconds, so timestamps are parsed into BigInt ticks; durations under 1 ms stay accurate. Ticks count 100 ns since the Unix epoch, UTC. Accepted forms: ISO 8601 (`2026-10-01T09:15:30.1234567Z`, `T` or space, optional `Z`/`±hh:mm`, no zone = UTC) and US short (`10/1/2026 9:15:30.1234567 AM`); to be confirmed against real logs in M1b.
+- **Timestamps:** 7 fractional digits (.NET ticks). JavaScript `Date` keeps only milliseconds, so timestamps are parsed into BigInt ticks; durations under 1 ms stay accurate. Ticks count 100 ns since the Unix epoch, UTC. Accepted forms: ISO 8601 (`2026-10-01T09:15:30.1234567Z`, `T` or space, optional `Z`/`±hh:mm`, no zone = UTC) and US short (`10/1/2026 9:15:30.1234567 AM`); to be confirmed against real logs in real-log validation before v1 (deferred M1b).
 - **Bad cells:** a row with an unreadable Log index is skipped; an unreadable Start time falls back to End time (or run start), an unreadable End time to Start time. Both are reported as per-row issues rather than rejecting the file.
 - **Truncation:** PAD shortens long values in the log, ending them with `...`. Such values are flagged and labelled "truncated by PAD" in the UI.
 - **Ordering:** rows are sorted by Log index, never by Action index.
@@ -228,7 +228,7 @@ Three in-memory types drive the UI (`LogRow`, `RunMeta`, `Annotation`); IndexedD
 | `annotations` | auto | `{ runId, logIndex?, kind: bookmark \| note, text, createdAt }` | `runId` |
 | `settings` | key | theme, column visibility, storage-warning dismissed | none |
 
-Storing the raw CSV, not derived rows, keeps storage small (about 2–5 MB per 10,000-row run, to be measured) and lets a newer app version re-derive with improved logic.
+Storing the raw CSV, not derived rows, keeps storage small (about 2–5 MB per 10,000-row run, to be measured in real-log validation before v1) and lets a newer app version re-derive with improved logic.
 
 ## Processing pipeline
 
@@ -241,7 +241,7 @@ A dropped file passes through seven synchronous stages in `core/`, then the UI r
 5. **Derive (per row)**
    1. Duration and offset from run start.
    2. Effect summary: for actions that write a variable, `variable ← value` (value cut to 80 characters); for conditionals, `Condition = value`; otherwise the first input.
-   3. Block depth: +1 after a block-opening action (If, Loop, For each, Loop condition), −1 at the matching End. Opening and closing action names are a configurable list, to be confirmed against real logs.
+   3. Block depth: +1 after a block-opening action (If, Loop, For each, Loop condition), −1 at the matching End. Opening and closing action names are a configurable list, to be confirmed against real logs in real-log validation before v1 (deferred M1b).
    4. Failure flag from Status and Log level.
 6. **Index (per run)**
    1. Variable index: variable name → ordered list of assignments (`logIndex`, value).
@@ -409,8 +409,8 @@ The biggest risks are environmental (what a locked-down browser allows), not tec
 **Open questions**
 
 - [ ] Should History group runs by flow name, or stay a single list sorted by date?
-- [ ] What is the exact export-timestamp format in the file name?
-- [ ] Which action names open and close blocks in the CSV (If, Else, Loop, For each, End)?
+- [ ] What is the exact export-timestamp format in the file name? (real-log validation before v1)
+- [ ] Which action names open and close blocks in the CSV (If, Else, Loop, For each, End)? (real-log validation before v1)
 - [ ] Do reviewers use Edge, Chrome or both on target machines?
 
 ## Roadmap after v1
