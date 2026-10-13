@@ -5,6 +5,8 @@
 // the same original maps to the same replacement across the whole file. Timestamps,
 // indexes, statuses, module/action names, CSV shape and JSON validity are kept.
 import Papa from 'papaparse'
+import { parseFileName } from '../../src/core/csv/fileName.ts'
+import { splitSepLine } from '../../src/core/csv/parseCsv.ts'
 
 export interface SanitizeOptions {
   /** Original file name; its run GUID is replaced consistently with the log body. */
@@ -184,7 +186,15 @@ class Sanitizer {
   readonly p = new Pseudonyms()
   private terms: { re: RegExp; original: string }[] = []
 
-  constructor(terms: readonly string[]) {
+  private readonly keep: ReadonlySet<string>
+
+  /**
+   * @param terms caller-supplied words to remove everywhere
+   * @param keep lower-cased words never learned as names (the column headers: a folder called
+   *   Inputs must not turn the Inputs header into a "surviving secret")
+   */
+  constructor(terms: readonly string[], keep: ReadonlySet<string> = new Set()) {
+    this.keep = keep
     for (const t of terms) this.addTerm(t)
   }
 
@@ -200,7 +210,10 @@ class Sanitizer {
   /** First pass over unescaped text: learn names that must also vanish from free text. */
   learn(text: string) {
     const add = (name: string | undefined) => {
-      if (name && name.length >= 3 && !GENERIC.has(name.toLowerCase())) this.addTerm(name)
+      const lower = name?.toLowerCase() ?? ''
+      if (name && name.length >= 3 && !GENERIC.has(lower) && !this.keep.has(lower)) {
+        this.addTerm(name)
+      }
     }
     for (const m of text.matchAll(USER_DIR)) add(m[1])
     for (const m of text.matchAll(UNC_HOST)) add(m[1])
@@ -351,18 +364,22 @@ function stringsOf(value: unknown): string[] {
 
 export function sanitizeLog(csv: string, options: SanitizeOptions): SanitizeResult {
   const bom = csv.charCodeAt(0) === 0xfeff
-  const parsed = Papa.parse<string[]>(bom ? csv.slice(1) : csv, { skipEmptyLines: 'greedy' })
+  // Portal exports start with an Excel sep= line; it is kept verbatim in the output.
+  const sep = splitSepLine(csv)
+  const parsed = Papa.parse<string[]>(sep.body, {
+    skipEmptyLines: 'greedy',
+    // Papa auto-detects when there is no sep= hint; the output reuses what it found.
+    ...(sep.delimiter ? { delimiter: sep.delimiter } : {}),
+  })
+  const delimiter = sep.delimiter ?? parsed.meta.delimiter
   const [header = [], ...rows] = parsed.data
   const jsonCols = new Set(
     header.flatMap((h, i) => (JSON_COLUMNS.has(h.trim().toLowerCase()) ? [i] : [])),
   )
 
-  const fileMatch =
-    /^(.+)_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_(.+?)(\.csv)?$/i.exec(
-      options.fileName,
-    )
+  const nameInfo = parseFileName(options.fileName)
 
-  const s = new Sanitizer(options.terms ?? [])
+  const s = new Sanitizer(options.terms ?? [], new Set(header.map((h) => h.trim().toLowerCase())))
   // JSON cells are learned from their decoded strings so paths match the plain-text patterns.
   for (const r of rows) {
     r.forEach((cell, i) => {
@@ -376,18 +393,23 @@ export function sanitizeLog(csv: string, options: SanitizeOptions): SanitizeResu
   }
 
   const out = rows.map((r) => r.map((cell, i) => (jsonCols.has(i) ? s.json(cell) : s.text(cell))))
-  const body = Papa.unparse({ fields: header, data: out }, { newline: '\r\n' })
+  const body = Papa.unparse({ fields: header, data: out }, { newline: '\r\n', delimiter })
 
   let fileName: string
-  if (fileMatch) {
-    const flow = options.flowName ?? s.text(fileMatch[1]!)
-    const guid = s.text(fileMatch[2]!)
-    fileName = `${flow}_${guid}_${fileMatch[3]!}.csv`
+  if (nameInfo.matched) {
+    // The flow name can carry project ids and client process names: pseudonymise it unless
+    // the caller names the fixture. Keep the original separators (- for portal exports).
+    const base = nameInfo.fileName
+    const sep1 = base.charAt(nameInfo.flowName.length)
+    const sep2 = base.charAt(nameInfo.flowName.length + 1 + 36)
+    const flow = options.flowName ?? s.p.get('flow', nameInfo.flowName, (n) => `flow${n}`)
+    const guid = s.text(nameInfo.runId!)
+    fileName = `${flow}${sep1}${guid}${sep2}${nameInfo.exportedAt!}.csv`
   } else {
     fileName = (options.flowName ?? s.text(options.fileName.replace(/\.csv$/i, ''))) + '.csv'
   }
 
-  const result = (bom ? '\uFEFF' : '') + body
+  const result = (bom ? '\uFEFF' : '') + sep.line + body
   const haystack = (result + fileName).toLowerCase()
   const residual = [...s.p.secrets].filter((x) => haystack.includes(x)).sort()
   return { csv: result, fileName, counts: s.p.counts, residual }

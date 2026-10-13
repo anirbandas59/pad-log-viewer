@@ -1,4 +1,4 @@
-// Turns a real PAD log into a safe test fixture.
+// Turns a real PAD log (portal export: BOM, sep= line, <flow>-<guid>-<timestamp>.csv) into a safe test fixture.
 //
 //   npm run sanitize -- <input.csv> [--out-dir tests/fixtures] [--terms "Client A,VM-PROD-01"] [--flow Name]
 //

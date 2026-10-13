@@ -91,7 +91,7 @@ describe('parseCsv', () => {
 
 // Real portal exports start with an Excel separator hint line before the header row.
 describe('parseCsv with a sep= line', () => {
-  const body = toCsv([row({ 'Log index': '1' }), row({ 'Log index': '2' })])
+  const body = toCsv([row({ 'Log index': '1' }), row({ 'Log index': '2' })], HEADERS)
 
   it('skips a leading sep=, line, with or without a BOM, and validates the real header', () => {
     for (const text of [`sep=,\r\n${body}`, `\uFEFFsep=,\r\n${body}`, `sep=,\n${body}`]) {
@@ -103,7 +103,7 @@ describe('parseCsv with a sep= line', () => {
   })
 
   it('uses the delimiter the sep= line names', () => {
-    const semicolon = toCsv([row({ 'Log index': '1', 'Log message': 'a, b' })]).replace(
+    const semicolon = toCsv([row({ 'Log index': '1', 'Log message': 'a, b' })], HEADERS).replace(
       /,(?=(?:[^"]*"[^"]*")*[^"]*$)/gm,
       ';',
     )

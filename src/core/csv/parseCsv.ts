@@ -34,13 +34,20 @@ export interface SepLine {
 
 /** Splits off the Excel `sep=<char>` hint line that portal exports start with. */
 export function splitSepLine(text: string): SepLine {
-  void text
-  throw new Error('not implemented')
+  const body = stripBom(text)
+  const m = /^sep=(.)(\r\n|\n|\r)/i.exec(body)
+  if (!m) return { line: '', delimiter: null, body }
+  return { line: m[0], delimiter: m[1]!, body: body.slice(m[0].length) }
 }
 
 /** Parses PAD run-log CSV text (RFC 4180) and validates its headers. */
 export function parseCsv(text: string): ParseCsvResult {
-  const result = Papa.parse<string[]>(stripBom(text), { skipEmptyLines: 'greedy' })
+  const { body, delimiter } = splitSepLine(text)
+  const result = Papa.parse<string[]>(body, {
+    skipEmptyLines: 'greedy',
+    // Papa auto-detects when the file gives no sep= hint.
+    ...(delimiter ? { delimiter } : {}),
+  })
   const [headerRow, ...dataRows] = result.data
   if (!headerRow || dataRows.length === 0) {
     return { ok: false, error: { kind: 'empty', message: 'The file has no log rows.' } }
