@@ -25,6 +25,7 @@ For each acceptance criterion of the milestone: write the failing Vitest test in
 ## Definition of done (per milestone)
 
 - `npm run check` green (typecheck + lint + test + build + size budget ≤ 1.5 MB).
+- `npm run test:e2e` green: Playwright browser tests of the built app. CI runs them in the `e2e` job on every push and PR; cloud sessions may not be able to download browsers, so CI is the authority.
 - Every acceptance criterion ticked in the PR body with evidence (test name, output, or screenshot).
 - `docs/architecture.md` updated if behaviour differs from it.
 
