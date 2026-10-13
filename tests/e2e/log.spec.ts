@@ -302,6 +302,16 @@ for (const width of [1366, 375]) {
       await expect(
         row(page, 1).locator('[title="Download Email Attachments From Shared Mailbox"]').first(),
       ).toBeAttached()
+      const status = row(page, 3).locator('[title="Succeeded with warnings after retrying"]')
+      await expect(status).toBeAttached()
+      if (width < 768) {
+        // On a card a long status is capped, so the action name keeps its room.
+        const [statusBox, cardBox] = await Promise.all([
+          status.boundingBox(),
+          row(page, 3).boundingBox(),
+        ])
+        expect(statusBox!.width).toBeLessThanOrEqual(cardBox!.width / 2 + 1)
+      }
     })
   })
 }
