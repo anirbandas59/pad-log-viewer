@@ -76,6 +76,8 @@ interface State {
 }
 
 let nextNoticeId = 1
+// Shared by every init() call: StrictMode runs effects twice in development.
+let initializing: Promise<void> | null = null
 
 export const useStore = create<State>()((set, get) => {
   const notify = (notice: Omit<Notice, 'id'>) =>
@@ -120,29 +122,31 @@ export const useStore = create<State>()((set, get) => {
     theme: readStoredTheme(),
     activeRunId: null,
 
-    async init() {
-      if (get().ready) return
-      applyTheme(get().theme)
-      let db: PadDb | null = null
-      try {
-        db = await openDb()
-      } catch {
-        db = null
-      }
-      const health = await checkStorageHealth(undefined, async () => {
-        if (!db) throw new Error('IndexedDB unavailable')
-      })
-      let bannerDismissed = false
-      if (db) {
-        bannerDismissed = (await getSetting<boolean>(db, STORAGE_WARNING_DISMISSED)) === true
-        const saved = await getSetting(db, THEME_SETTING)
-        if (isTheme(saved) && saved !== get().theme) {
-          applyTheme(saved)
-          set({ theme: saved })
+    init() {
+      initializing ??= (async () => {
+        applyTheme(get().theme)
+        let db: PadDb | null = null
+        try {
+          db = await openDb()
+        } catch {
+          db = null
         }
-      }
-      set({ db, health, bannerDismissed, ready: true })
-      await refresh()
+        const health = await checkStorageHealth(undefined, async () => {
+          if (!db) throw new Error('IndexedDB unavailable')
+        })
+        let bannerDismissed = false
+        if (db) {
+          bannerDismissed = (await getSetting<boolean>(db, STORAGE_WARNING_DISMISSED)) === true
+          const saved = await getSetting(db, THEME_SETTING)
+          if (isTheme(saved) && saved !== get().theme) {
+            applyTheme(saved)
+            set({ theme: saved })
+          }
+        }
+        set({ db, health, bannerDismissed, ready: true })
+        await refresh()
+      })()
+      return initializing
     },
 
     async addFiles(files) {
