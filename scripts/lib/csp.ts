@@ -11,7 +11,9 @@ export interface InlineHashes {
 
 const SCRIPT = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi
 const STYLE = /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi
-const URL_ATTR = /\s(?:src|href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
+// Attributes that make the browser load or submit to a URL. `data` is <object data>, never data-*.
+const URL_ATTR =
+  /\s(?:src|href|srcset|poster|data|action)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
 
 const hash = (text: string) =>
   `'sha256-${createHash('sha256').update(text, 'utf8').digest('base64')}'`
