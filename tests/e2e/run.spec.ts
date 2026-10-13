@@ -58,10 +58,10 @@ test.describe('overview', () => {
     await expect(card).toContainText('Action failed at step 997')
     await card.getByRole('button', { name: 'Jump to row' }).click()
     await expect(tab(page, 'Execution log')).toHaveAttribute('aria-selected', 'true')
-    const row = page.getByTestId('log-list').locator('[data-log-index="997"]')
+    const row = page.getByTestId('log-table').locator('[data-log-index="997"]')
     await expect(row).toHaveAttribute('aria-selected', 'true')
     await expect(row).toBeInViewport()
-    await expect(page.getByTestId('log-list').locator('[aria-selected="true"]')).toHaveCount(1)
+    await expect(page.getByTestId('log-table').locator('[aria-selected="true"]')).toHaveCount(1)
   })
 
   test('says so when the run has no failures', async ({ page }) => {
@@ -96,7 +96,7 @@ test.describe('overview', () => {
     await expect(slowest.first()).toContainText('Invoke web service')
     await slowest.first().getByRole('button').click()
     await expect(tab(page, 'Execution log')).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByTestId('log-list').locator('[data-log-index="12"]')).toHaveAttribute(
+    await expect(page.getByTestId('log-table').locator('[data-log-index="12"]')).toHaveAttribute(
       'aria-selected',
       'true',
     )

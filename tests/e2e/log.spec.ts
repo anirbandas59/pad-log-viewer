@@ -1,13 +1,33 @@
 // M6: Execution log. Acceptance: 10k rows scroll without blank rows; filter update < 100 ms;
 // the drawer shows the truncation badge.
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { syntheticRun, toCsv } from '../unit/helpers/syntheticLog.ts'
-import { FAILED, REAL, drop, fixture, openApp, openRun } from './helpers.ts'
+import { param, row as csvRow, syntheticRun, toCsv } from '../unit/helpers/syntheticLog.ts'
+import { FAILED, drop, fixture, openApp, openRun, storedSetting } from './helpers.ts'
 
 // 10,000 rows: failures at Log index 997, 1994, …; row 13 (every 13th) has a value PAD cut short.
 const BIG = {
   name: 'Big_Run-3c4d5e6f-7081-4a9b-8c0d-2e3f4a5b6c7d-20261013T110000Z.csv',
   text: toCsv(syntheticRun(10_000)),
+}
+
+// PAD itself cuts logged values at about 150 characters, so no fixture has a value long
+// enough for "Show more"; this run has one, as HTML that must show as text.
+const LONG_HTML = `<p>Dear Supplier,</p><script>window.__xss = 1</script>${'<p>Line of the email body.</p>'.repeat(20)}`
+const LONG = {
+  name: 'Long_Values-4d5e6f70-8192-4a3b-9c4d-5e6f708192a3-20261013T120000Z.csv',
+  text: toCsv([
+    csvRow({ 'Log index': '1' }),
+    csvRow({
+      'Log index': '2',
+      'Module name': 'Text',
+      'Action name': 'CreateHTMLContentAction',
+      'Module display name': 'Text',
+      'Action display name': 'Create HTML content',
+      Inputs: JSON.stringify({ HtmlEditor: param('Html editor', LONG_HTML) }),
+      Outputs: JSON.stringify({ HtmlContent: param('Html Content', LONG_HTML, 'txt_Body') }),
+    }),
+    csvRow({ 'Log index': '3' }),
+  ]),
 }
 
 const tab = (page: Page, name: string) => page.getByRole('tab', { name })
@@ -124,7 +144,7 @@ test.describe('filter bar', () => {
     await page.getByRole('checkbox', { name: 'Init' }).check()
     await expect(count).toHaveText('7 of 17 rows')
     await page.getByRole('searchbox', { name: 'Search the log' }).fill('excel')
-    await expect(count).toHaveText('3 of 17 rows')
+    await expect(count).toHaveText('2 of 17 rows')
     await expect(page.getByTestId('active-filters')).toHaveText('2 filters')
     await page.getByRole('button', { name: 'Clear filters' }).click()
     await expect(count).toHaveText('17 of 17 rows')
@@ -149,9 +169,9 @@ test.describe('row drawer', () => {
 
   test('shows parameters, long values, raw JSON and copy actions', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
-    await openLog(page, fixture(REAL), 'Invoice_Extraction_Main')
+    await openLog(page, LONG, 'Long_Values')
     await page.getByRole('searchbox', { name: 'Search the log' }).fill('dear supplier')
-    await expect(page.getByTestId('row-count')).toHaveText(/^[1-9]\d* of 1,235 rows$/)
+    await expect(page.getByTestId('row-count')).toHaveText('1 of 3 rows')
     await page.getByTestId('log-table').locator('[data-log-index]').first().click()
     const d = drawer(page)
     await expect(d.getByRole('heading', { name: 'Inputs' })).toBeVisible()
@@ -159,6 +179,9 @@ test.describe('row drawer', () => {
     const more = d.getByRole('button', { name: 'Show more' }).first()
     await more.click()
     await expect(d.getByRole('button', { name: 'Show less' }).first()).toBeVisible()
+    // Log values are text, never HTML.
+    await expect(d.getByTestId('param').first()).toContainText('<script>window.__xss = 1</script>')
+    expect(await page.evaluate(() => (window as { __xss?: number }).__xss)).toBeUndefined()
 
     await d.getByRole('button', { name: 'Raw JSON' }).click()
     const tree = d.getByRole('tree').first()
@@ -241,6 +264,10 @@ test.describe('column picker', () => {
     await expect(header.getByRole('columnheader', { name: 'Log level' })).toBeVisible()
     await expect(header.getByRole('columnheader', { name: 'Effect' })).toHaveCount(0)
     await expect(row(page, 12)).toContainText('Error')
+    // The choice is written to IndexedDB just after; wait for it before reloading.
+    await expect
+      .poll(() => storedSetting(page, 'logColumns'))
+      .toMatchObject({ level: true, effect: false })
     await page.reload()
     await openRun(page, 'Invoice_Processing_v2')
     await tab(page, 'Execution log').click()
@@ -259,6 +286,9 @@ for (const [width, layout] of [
 
     test(`lays out as ${layout} without horizontal page scroll`, async ({ page }) => {
       await openLog(page, fixture(FAILED), 'Invoice_Processing_v2')
+      if (process.env.SCREENSHOTS) {
+        await page.screenshot({ path: `docs/screenshots/m6/log-${width}-list.png` })
+      }
       await row(page, 12).click()
       const d = drawer(page)
       await expect(d).toBeVisible()
