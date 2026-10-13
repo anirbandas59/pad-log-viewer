@@ -38,7 +38,7 @@ For each acceptance criterion of the milestone: write the failing Vitest test in
 5. After 3 `REQUEST_CHANGES` rounds the PR is labelled `needs-human`; stop and wait.
 6. The maintainer merges only when **every** `review-gate` check entry on the head is green: it requires the reviewer's latest review to APPROVE the exact head commit (there is no branch protection on this plan). A dismissed approval turns its entry red.
 
-`main` is untouched until the v1 release merges `dev` into it. Until then `.github/workflows/claude-review.yml` must stay identical to its copy on `main`: `claude-code-action` skips the review when the two differ. The reviewer reads `.claude/` from the PR branch, so keep milestone branches up to date with `dev` (`git merge origin/dev`).
+`main` changes only through release PRs (`dev` → `main`) and the back-merge that follows each one. `.github/workflows/claude-review.yml` must stay identical on `main` and `dev`: `claude-code-action` skips the review when a PR's copy differs from `main`'s. So a change to that file goes as a PR into `main` (its own review is skipped; the maintainer merges it as an override), followed by a back-merge `main` → `dev`. The reviewer reads `.claude/` from the PR branch, so keep milestone branches up to date with `dev` (`git merge origin/dev`).
 
 Escalate (stop and ask in the PR/session) for: a dependency outside the Architecture tech stack, a data-model change, anything adding a network call, or changes to `.claude/`, `CLAUDE.md` or CI workflows (cloud sessions are blocked from editing those; propose them in the PR body under "Proposed config changes").
 
@@ -50,4 +50,4 @@ Escalate (stop and ask in the PR/session) for: a dependency outside the Architec
 4. Open PR `dev` → `main` titled `chore(release): vX.Y.Z` with the changelog; the maintainer merges.
 5. Maintainer tags `vX.Y.Z` on `main` (the workflow refuses tags elsewhere); `release.yml` builds `pad-log-viewer-vX.Y.Z.html` and attaches it and `pad-log-viewer-vX.Y.Z.zip` to the release.
 6. Maintainer checks the HTML on a locked-down machine and in Windows Edge from `file://`.
-7. After the v1 merge (`main` and `dev` equal again), fix `claude-review.yml` in one PR to both branches: move `concurrency` from workflow to job level (skipped runs currently cancel live reviews) and add `checks: read` (the reviewer cannot read CI status).
+7. Back-merge: open PR `main` → `dev` and merge it with a merge commit (never delete `main` afterwards). GitHub PRs never fast-forward, so without it the release merge stays on `main` only. Afterwards `git log origin/dev..origin/main` is empty; `origin/main..origin/dev` shows the back-merge commit, which goes to `main` with the next release.
