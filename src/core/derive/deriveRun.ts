@@ -29,3 +29,12 @@ export function deriveRun(run: NormalizedRun, rules: DepthRules = DEFAULT_DEPTH_
     summary: summarizeRun(rows, run.runStart, run.runEnd),
   }
 }
+
+export type DeriveCsvResult =
+  { ok: true; run: DerivedRun; runStart: bigint; runEnd: bigint } | { ok: false; error: string }
+
+export function deriveCsv(csv: string, rules: DepthRules = DEFAULT_DEPTH_RULES): DeriveCsvResult {
+  void csv
+  void rules
+  throw new Error('not implemented')
+}
