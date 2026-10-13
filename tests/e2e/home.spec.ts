@@ -152,6 +152,16 @@ test.describe('theme', () => {
     await page.getByRole('button', { name: 'Switch to dark theme' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   })
+
+  test('restores the theme from the settings store when localStorage was cleared', async ({
+    page,
+  }) => {
+    await page.getByRole('button', { name: 'Switch to light theme' }).click()
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+    await page.evaluate(() => localStorage.clear())
+    await page.reload()
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  })
 })
 
 test.describe('storage', () => {

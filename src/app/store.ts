@@ -20,7 +20,15 @@ import { classifyDrop, ingestCsv, mergeReplace, type IngestedRun } from '../core
 import type { HistoryQuery } from '../core/model/historyView.ts'
 import type { RunMeta } from '../core/model/types.ts'
 import { downloadText } from './download.ts'
-import { THEME_SETTING, applyTheme, isTheme, readStoredTheme, type Theme } from './theme.ts'
+import {
+  THEME_SETTING,
+  applyTheme,
+  isTheme,
+  readLocalTheme,
+  readStoredTheme,
+  saveLocalTheme,
+  type Theme,
+} from './theme.ts'
 
 export interface Notice {
   id: number
@@ -57,8 +65,6 @@ interface State {
   confirm: Confirm | null
   query: HistoryQuery
   theme: Theme
-  /** The user toggled the theme in this session, so a stored theme must not override it. */
-  themeChosen: boolean
   activeRunId: string | null
 
   init(): Promise<void>
@@ -122,7 +128,6 @@ export const useStore = create<State>()((set, get) => {
     confirm: null,
     query: { text: '', status: 'all', tag: null, sort: 'imported' },
     theme: readStoredTheme(),
-    themeChosen: false,
     activeRunId: null,
 
     init() {
@@ -140,10 +145,14 @@ export const useStore = create<State>()((set, get) => {
         let bannerDismissed = false
         if (db) {
           bannerDismissed = (await getSetting<boolean>(db, STORAGE_WARNING_DISMISSED)) === true
+          // localStorage is the authority; the stored copy only fills in when it is empty.
           const saved = await getSetting(db, THEME_SETTING)
-          if (isTheme(saved) && saved !== get().theme && !get().themeChosen) {
+          if (readLocalTheme() === null && isTheme(saved)) {
             applyTheme(saved)
+            saveLocalTheme(saved)
             set({ theme: saved })
+          } else {
+            await setSetting(db, THEME_SETTING, get().theme)
           }
         }
         set({ db, health, bannerDismissed, ready: true })
@@ -332,7 +341,8 @@ export const useStore = create<State>()((set, get) => {
     toggleTheme() {
       const theme: Theme = get().theme === 'dark' ? 'light' : 'dark'
       applyTheme(theme)
-      set({ theme, themeChosen: true })
+      saveLocalTheme(theme)
+      set({ theme })
       const { db } = get()
       if (db) void setSetting(db, THEME_SETTING, theme)
     },

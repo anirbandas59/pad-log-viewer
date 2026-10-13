@@ -345,7 +345,7 @@ The UI has two screens, Home and Run view, and is designed failure-first: openin
 
 - **Status colours:** Succeeded green, Failed red, warning amber, unknown grey. Status is always paired with an icon so colour is never the only signal.
 - **Subflow colours:** assigned from a 10-colour palette by hashing the subflow name, so `main` keeps its colour across runs.
-- **Themes:** dark (default) and light, defined as CSS variables; contrast meets WCAG AA. The toggle sets `data-theme` on `<html>`; the choice is kept in localStorage (applied before the first paint) and mirrored to the `settings` store (`app/theme.ts`).
+- **Themes:** dark (default) and light, defined as CSS variables; contrast meets WCAG AA. The toggle sets `data-theme` on `<html>`. The choice is saved in localStorage, which is read before the first paint and wins at startup, and copied to the `settings` store, which restores it only when localStorage is empty (`app/theme.ts`). A toggle made before the database opens is therefore kept, and later written to the store.
 - **Type:** system UI font for text, monospace for values, variable names and timestamps.
 - **Density toggle:** comfortable (40 px rows) and compact (28 px rows).
 
