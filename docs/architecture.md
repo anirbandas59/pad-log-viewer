@@ -113,6 +113,7 @@ pad-log-viewer/
 │  │  │  ├─ variables.ts        # variable assignment index
 │  │  │  ├─ summary.ts          # run-level metrics, slowest actions
 │  │  │  ├─ search.ts           # lower-cased search text per row
+│  │  │  ├─ overview.ts         # subflow bars and colours, facet breakdowns
 │  │  │  └─ deriveRun.ts        # stages 5–6 over a normalized run
 │  │  └─ storage/
 │  │     ├─ db.ts               # IndexedDB schema and migrations
@@ -305,7 +306,15 @@ The UI has two screens, Home and Run view, and is designed failure-first: openin
 
 ### Run view
 
-**Header strip (sticky):** back to Home · display name (editable) · overall status pill · total duration · start and end time · actions · subflows · failures · warnings · Export filtered CSV.
+**Header strip (sticky):** back to Home · display name (editable) · overall status pill · total duration · start and end time · actions · subflows · failures · warnings · Export filtered CSV (M7).
+
+Opening a run re-derives its stored CSV (`deriveCsv`: parse, normalize, derive) after a "Reading the log…" state has painted; a CSV that no longer parses shows an error in place of the tabs. Renaming saves `displayName` to history (`updateRun`). The tabs follow the WAI-ARIA tabs pattern (arrow keys, Home, End).
+
+**Overview (M5):**
+- First-failure card: the lowest-Log-index failure with its subflow, offset, status and Log message, or "No failures in this run". **Jump to row** opens the Execution log with that row selected and scrolled to the centre; each top-10 slowest action jumps the same way.
+- Time per subflow: one bar per subflow, largest first, from the run summary's wall-clock split, so the bars sum exactly to the run duration (`subflowBars`); bar colour from the 10-colour subflow palette (`subflowColor`, CSS tokens `--subflow-0` … `--subflow-9`).
+- Status breakdown (bars in status colours) and module usage (top 8, the rest folded into "Other"; `facetEntries`).
+- Until M6, the Execution log tab is a plain selectable list (Log index, subflow, action indented by depth, effect, status, duration); M6 replaces it with the virtualized table.
 
 | Tab | Answers | Content |
 | --- | --- | --- |
