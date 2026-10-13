@@ -85,6 +85,21 @@ describe('summarizeRun', () => {
     expect(s.overallStatus).toBe('Failed')
   })
 
+  it('works in Log index order even when rows arrive out of order', () => {
+    const rows = [
+      mk(3, 20, 5, { subflow: 'Sub', status: 'Failed', isFailure: true }),
+      mk(1, 0, 5, { subflow: 'main' }),
+      mk(2, 10, 5, { subflow: 'main', level: 'Error', isFailure: true }),
+    ]
+    const s = summarizeRun(rows, 0n, 30n)
+    expect(s.firstFailure?.logIndex).toBe(2)
+    expect(s.timePerSubflow).toEqual([
+      { subflow: 'main', ticks: 20n },
+      { subflow: 'Sub', ticks: 10n },
+    ])
+    expect([...s.facets.subflow.keys()]).toEqual(['main', 'Sub'])
+  })
+
   it('reports Succeeded without failures and Unknown for an empty run', () => {
     expect(summarizeRun([mk(1, 0, 1)], 0n, 1n).overallStatus).toBe('Succeeded')
     const empty = summarizeRun([], 0n, 0n)

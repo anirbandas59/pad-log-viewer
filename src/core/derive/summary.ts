@@ -34,15 +34,17 @@ function bump(map: Map<string, number>, key: string) {
 }
 
 /**
- * Run-level metrics over rows sorted by Log index. Time per subflow gives each row the
- * time from its start to the next row's start (the last row: to run end), so a Run
- * subflow action is not counted twice and the parts add up to the run duration.
+ * Run-level metrics, worked in Log index order whatever order rows arrive in. Time per
+ * subflow gives each row the time from its start to the next row's start (the last row:
+ * to run end), so a Run subflow action is not counted twice and the parts add up to the
+ * run duration.
  */
 export function summarizeRun(
-  rows: readonly LogRow[],
+  input: readonly LogRow[],
   runStart: bigint,
   runEnd: bigint,
 ): RunSummary {
+  const rows = [...input].sort((a, b) => a.logIndex - b.logIndex)
   const facets = {
     subflow: new Map<string, number>(),
     module: new Map<string, number>(),
