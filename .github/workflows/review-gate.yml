@@ -1,0 +1,51 @@
+name: Review gate
+
+# Branch protection is unavailable on this plan, so nothing blocks a merge. This check goes red
+# unless the reviewer approved the exact commit being merged, so an unapproved PR shows a red ✗
+# next to the merge button.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  pull-requests: read
+
+concurrency:
+  group: review-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review-gate:
+    name: review-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require an approval of the head commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          echo "Labels: ${LABELS:-none}"
+          if [[ ",$LABELS," != *",approved,"* ]]; then
+            echo "::error::Not approved: the PR does not have the 'approved' label. Do not merge."
+            exit 1
+          fi
+          # The newest review by the Claude reviewer must approve the head commit, not an older one.
+          latest=$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
+            --jq '[.[] | select(.user.login == "claude[bot]")] | last | "\(.state) \(.commit_id)"')
+          echo "Latest reviewer review: ${latest:-none}"
+          if [[ "$latest" != "APPROVED $HEAD_SHA" && "$latest" != "COMMENTED $HEAD_SHA" ]]; then
+            echo "::error::The reviewer has not approved the head commit $HEAD_SHA. Do not merge."
+            exit 1
+          fi
+          if [[ "$latest" == "COMMENTED $HEAD_SHA" ]]; then
+            body=$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
+              --jq '[.[] | select(.user.login == "claude[bot]")] | last | .body')
+            if ! grep -Eq '^Verdict: APPROVE\s*$' <<<"$body"; then
+              echo "::error::The reviewer's latest review of $HEAD_SHA is not an APPROVE verdict. Do not merge."
+              exit 1
+            fi
+          fi
+          echo "Approved by the reviewer at $HEAD_SHA."
