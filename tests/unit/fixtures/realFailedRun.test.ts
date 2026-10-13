@@ -62,6 +62,36 @@ describe('real failed-run fixture', () => {
     ])
   })
 
+  // Hand-worked from the Close Application subflow (Action index = source line):
+  //  1 If (true)                       depth 0
+  //  2   Split text                    depth 1
+  //  3   For each app (5 passes)       depth 1
+  //  4     On block error              depth 2
+  //  5       If process (false: skips its body and End)  depth 3
+  //  9       Next loop                 depth 3 (inside the block body, after If process ends)
+  // 13   End (of For each, logged on every pass)        depth 1
+  // 14 End (of If)                     depth 0
+  it('matches the hand-worked depths of the Close Application subflow', () => {
+    const rows = deriveRun(loadRun(REAL_FAILED_FIXTURE)).rows.filter(
+      (r) => r.subflow === 'Close Application',
+    )
+    const byLine = new Map<number, Set<number>>()
+    for (const r of rows) {
+      if (!byLine.has(r.actionIndex)) byLine.set(r.actionIndex, new Set())
+      byLine.get(r.actionIndex)!.add(r.depth)
+    }
+    const depthOf = (line: number) => [...(byLine.get(line) ?? [])]
+    expect(depthOf(1)).toEqual([0])
+    expect(depthOf(2)).toEqual([1])
+    expect(depthOf(3)).toEqual([1])
+    expect(depthOf(4)).toEqual([2])
+    expect(depthOf(5)).toEqual([3])
+    expect(depthOf(9)).toEqual([3])
+    expect(depthOf(13)).toEqual([1])
+    expect(depthOf(14)).toEqual([0])
+    expect(rows.filter((r) => r.actionDisplay === 'For each')).toHaveLength(5)
+  })
+
   it('derives block depth that never goes negative', () => {
     const derived = deriveRun(loadRun(REAL_FAILED_FIXTURE))
     expect(Math.min(...derived.rows.map((r) => r.depth))).toBeGreaterThanOrEqual(0)

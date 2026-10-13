@@ -43,6 +43,15 @@ function offending(text: string): Record<string, string[]> {
       .filter((u) => !/^(?:dir|term|file)\d+$/.test(u) && !u.startsWith('<<')),
   )
   add(
+    'domain account',
+    // The sanitizer's DOMAIN\\account pattern (any case); backslashes may be JSON-escaped.
+    (
+      text.match(
+        /(?<![\w\\/:.$-])[A-Za-z][A-Za-z0-9-]{1,14}\\{1,2}[A-Za-z][\w.$-]*(?![\w.$\\/-])/g,
+      ) ?? []
+    ).filter((a) => !/^DOMAIN\\+account\d+$/.test(a)),
+  )
+  add(
     'OneDrive org',
     [...text.matchAll(/OneDrive - ([^\\/"]+)/g)]
       .map((m) => m[1]!.trim())
@@ -91,6 +100,7 @@ describe('real fixtures contain only pseudonyms where client data would be', () 
       'C:\\Users\\jdoe\\a.txt',
       'C:/Users/mallory/b.txt',
       'OneDrive - Acme Corp',
+      'logged in as corp\\jdoe',
       '050003521107',
       'AAMkADA4MjhlZTQyLTUzOGQtNDg2My1iNWJiLTA0NGVlNGNiZDA4YgBGAAAAAA',
     ].join(' ')
@@ -98,6 +108,7 @@ describe('real fixtures contain only pseudonyms where client data would be', () 
       [
         'GUID',
         'OneDrive org',
+        'domain account',
         'e-mail',
         'encoded blob',
         'file URL',
@@ -108,7 +119,9 @@ describe('real fixtures contain only pseudonyms where client data would be', () 
     )
     expect(Object.keys(offending('C:/Users/mallory/b.txt'))).toEqual(['user folder'])
     expect(
-      offending('user1@example.test https://host1.example.test/path1 20261012 000000000005'),
+      offending(
+        'user1@example.test https://host1.example.test/path1 20261012 000000000005 DOMAIN\\account1',
+      ),
     ).toEqual({})
   })
 })
