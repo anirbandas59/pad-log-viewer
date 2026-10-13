@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildVariableIndex } from '../../../src/core/derive/variables.ts'
+import { buildVariableIndex, variableSummaries } from '../../../src/core/derive/variables.ts'
 import type { Param } from '../../../src/core/model/types.ts'
 import { NESTED_FIXTURE, loadRun } from '../helpers/fixtures.ts'
 
@@ -56,5 +56,35 @@ describe('buildVariableIndex', () => {
       'done',
     ])
     expect(index.get('txt_Item')!.map((a) => a.logIndex)).toEqual([2, 17])
+  })
+})
+
+describe('variableSummaries', () => {
+  const index = buildVariableIndex([
+    { logIndex: 1, subflow: 'main', outputs: [out('txt_Path', 'C:\\in')] },
+    { logIndex: 2, subflow: 'Init', outputs: [out('n', '1'), out('txt_Path', 'C:\\out')] },
+    { logIndex: 3, subflow: 'Init', outputs: [out('n', '2')] },
+    { logIndex: 4, subflow: 'main', outputs: [out('n', 'cut short...')] },
+  ])
+
+  it('lists variables in order of first assignment with count, first and last value', () => {
+    const list = variableSummaries(index)
+    expect(list.map((v) => [v.name, v.count])).toEqual([
+      ['txt_Path', 2],
+      ['n', 3],
+    ])
+    expect(list[1]!.first).toEqual({ logIndex: 2, subflow: 'Init', value: '1', truncated: false })
+    expect(list[1]!.last).toEqual({
+      logIndex: 4,
+      subflow: 'main',
+      value: 'cut short...',
+      truncated: true,
+    })
+  })
+
+  it('filters by name, ignoring case', () => {
+    expect(variableSummaries(index, 'PATH').map((v) => v.name)).toEqual(['txt_Path'])
+    expect(variableSummaries(index, '  ').map((v) => v.name)).toEqual(['txt_Path', 'n'])
+    expect(variableSummaries(index, 'zzz')).toEqual([])
   })
 })

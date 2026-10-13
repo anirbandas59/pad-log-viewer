@@ -157,3 +157,20 @@ describe('activeFilterCount', () => {
     ).toBe(6)
   })
 })
+
+describe('bookmarked only', () => {
+  it('keeps the bookmarked rows, ANDed with the other filters', () => {
+    const marked = new Set([2, 4, 6])
+    expect(ids(filterRows(rows, f({ bookmarkedOnly: true }), marked))).toEqual([2, 4, 6])
+    expect(ids(filterRows(rows, f({ bookmarkedOnly: true, text: 'excel' }), marked))).toEqual([
+      2, 6,
+    ])
+    expect(filterRows(rows, f({ bookmarkedOnly: true }))).toEqual([])
+    expect(ids(filterRows(rows, f({}), marked))).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it('counts as one active filter', () => {
+    expect(activeFilterCount(f({ bookmarkedOnly: true }))).toBe(1)
+    expect(EMPTY_FILTERS.bookmarkedOnly).toBe(false)
+  })
+})

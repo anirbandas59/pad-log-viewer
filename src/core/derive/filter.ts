@@ -1,4 +1,5 @@
 // Execution-log filters: search, facets, Errors only and Hide noise.
+/* eslint-disable @typescript-eslint/no-unused-vars -- M7 stubs until the implementation lands */
 import type { LogRow } from '../model/types.ts'
 
 export type RowStatusKind = 'Succeeded' | 'Failed' | 'Warning' | 'Unknown'
@@ -11,6 +12,7 @@ export interface LogFilters {
   modules: string[]
   errorsOnly: boolean
   hideNoise: boolean
+  bookmarkedOnly: boolean
 }
 
 export const EMPTY_FILTERS: LogFilters = {
@@ -20,6 +22,7 @@ export const EMPTY_FILTERS: LogFilters = {
   modules: [],
   errorsOnly: false,
   hideNoise: false,
+  bookmarkedOnly: false,
 }
 
 type Row = Pick<
@@ -54,7 +57,11 @@ export function isNoise(row: Pick<LogRow, 'module' | 'action'>): boolean {
  * toggles, OR within a facet. Search terms are matched against the precomputed,
  * lower-cased `searchText`.
  */
-export function filterRows<T extends Row>(rows: readonly T[], filters: LogFilters): T[] {
+export function filterRows<T extends Row>(
+  rows: readonly T[],
+  filters: LogFilters,
+  _bookmarked: ReadonlySet<number> = new Set(),
+): T[] {
   const terms = filters.text.toLowerCase().split(/\s+/).filter(Boolean)
   const subflows = filters.subflows.length ? new Set(filters.subflows) : null
   const statuses = filters.statuses.length ? new Set(filters.statuses) : null

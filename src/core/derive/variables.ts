@@ -1,4 +1,5 @@
 // Variable assignment index.
+/* eslint-disable @typescript-eslint/no-unused-vars -- M7 stubs until the implementation lands */
 import type { LogRow } from '../model/types.ts'
 
 export interface Assignment {
@@ -31,4 +32,15 @@ export function buildVariableIndex(
     }
   }
   return index
+}
+
+export interface VariableSummary {
+  name: string
+  count: number
+  first: Assignment
+  last: Assignment
+}
+
+export function variableSummaries(_index: VariableIndex, _query = ''): VariableSummary[] {
+  throw new Error('not implemented')
 }
