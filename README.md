@@ -45,6 +45,12 @@ Nothing is installed and nothing needs a server, Node or admin rights.
 
 ## What's new
 
+### v1.0.1
+
+- Execution log: long subflow names and statuses end in "…" inside their column instead of painting over the next one, and show in full on hover. The Subflow column is wider.
+- Execution log on phones: a long status is capped at half the card, so the action name stays readable.
+- Variables: the history shows subflow names in full while the row has room; only the longest is shortened.
+
 ### v1.0.0
 
 First release.
