@@ -46,6 +46,14 @@ describe('externalReferences', () => {
     expect(externalReferences(html)).toEqual(['https://x.example/b.png'])
   })
 
+  it('splits srcset candidates even without a space after the comma', () => {
+    const html = PAGE.replace(
+      '<title>',
+      '<img srcset="data:image/png;base64,AA 1x,https://evil.example/b.png 2x,c.png"><title>',
+    )
+    expect(externalReferences(html)).toEqual(['https://evil.example/b.png', 'c.png'])
+  })
+
   it('reports namespaced xlink:href in SVG', () => {
     const html = PAGE.replace(
       '<title>',

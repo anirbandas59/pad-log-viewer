@@ -83,12 +83,15 @@ describe('real fixtures contain only pseudonyms where client data would be', () 
       'file://fs01/share/a.pdf',
       '4c766126-8e2d-47cc-bc49-6f15ac34b689',
       'C:\\Users\\jdoe\\a.txt',
+      'C:/Users/mallory/b.txt',
+      'OneDrive - Acme Corp',
       '050003521107',
       'AAMkADA4MjhlZTQyLTUzOGQtNDg2My1iNWJiLTA0NGVlNGNiZDA4YgBGAAAAAA',
     ].join(' ')
     expect(Object.keys(offending(leaky)).sort()).toEqual(
       [
         'GUID',
+        'OneDrive org',
         'e-mail',
         'encoded blob',
         'file URL',
@@ -97,6 +100,7 @@ describe('real fixtures contain only pseudonyms where client data would be', () 
         'web URL',
       ].sort(),
     )
+    expect(Object.keys(offending('C:/Users/mallory/b.txt'))).toEqual(['user folder'])
     expect(
       offending('user1@example.test https://host1.example.test/path1 20261012 000000000005'),
     ).toEqual({})
