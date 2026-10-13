@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { parseCsv, stripBom } from '../../../src/core/csv/parseCsv.ts'
+import { parseCsv, splitSepLine, stripBom } from '../../../src/core/csv/parseCsv.ts'
 import { HEADERS, param, row, toCsv } from '../helpers/syntheticLog.ts'
 
 function ok(text: string) {
@@ -86,5 +86,38 @@ describe('parseCsv', () => {
     const r = ok(text)
     expect(r.rows.length).toBeGreaterThanOrEqual(15)
     expect(r.extraColumns).toEqual([])
+  })
+})
+
+// Real portal exports start with an Excel separator hint line before the header row.
+describe('parseCsv with a sep= line', () => {
+  const body = toCsv([row({ 'Log index': '1' }), row({ 'Log index': '2' })])
+
+  it('skips a leading sep=, line, with or without a BOM, and validates the real header', () => {
+    for (const text of [`sep=,\r\n${body}`, `\uFEFFsep=,\r\n${body}`, `sep=,\n${body}`]) {
+      const r = ok(text)
+      expect(r.headers).toEqual([...HEADERS])
+      expect(r.rows).toHaveLength(2)
+      expect(r.rows[1]!['Log index']).toBe('2')
+    }
+  })
+
+  it('uses the delimiter the sep= line names', () => {
+    const semicolon = toCsv([row({ 'Log index': '1', 'Log message': 'a, b' })]).replace(
+      /,(?=(?:[^"]*"[^"]*")*[^"]*$)/gm,
+      ';',
+    )
+    const r = ok(`sep=;\r\n${semicolon}`)
+    expect(r.headers).toEqual([...HEADERS])
+    expect(r.rows[0]!['Log message']).toBe('a, b')
+  })
+
+  it('reports the separator line it skipped', () => {
+    expect(splitSepLine(`\uFEFFsep=,\r\n${body}`)).toEqual({
+      line: 'sep=,\r\n',
+      delimiter: ',',
+      body,
+    })
+    expect(splitSepLine(body)).toEqual({ line: '', delimiter: null, body })
   })
 })

@@ -26,3 +26,17 @@ export function parseFileName(fileName: string): FileNameInfo {
     matched: true,
   }
 }
+
+/** Same export: same run GUID and same export timestamp (the same file dropped again). */
+export function isSameExport(a: FileNameInfo, b: FileNameInfo): boolean {
+  void a
+  void b
+  throw new Error('not implemented')
+}
+
+/** Same run: same run GUID, any export timestamp (a re-export of the run). */
+export function isSameRun(a: FileNameInfo, b: FileNameInfo): boolean {
+  void a
+  void b
+  throw new Error('not implemented')
+}
