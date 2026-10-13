@@ -183,7 +183,7 @@ const SUBFLOW_VARS = {
       csvRow({
         'Log index': i!,
         Subflow: subflow!,
-        Outputs: JSON.stringify({ V: param('Value', `C:\\Data\\Screens\\run${i}`, 'txt_Folder') }),
+        Outputs: JSON.stringify({ V: param('Value', `D:/Data/Screens/run${i}`, 'txt_Folder') }),
       }),
     ),
   ),
@@ -214,7 +214,7 @@ test.describe('variables history columns', () => {
     // A name wider than its cap still ends in "…", with the full name on hover.
     expect(await cut(HUGE_SUBFLOW)).toBe(true)
     // Values are short, so they are not cut either.
-    expect(await cut('C:\\Data\\Screens\\run2')).toBe(false)
+    expect(await cut('D:/Data/Screens/run2')).toBe(false)
   })
 })
 
