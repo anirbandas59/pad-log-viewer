@@ -565,7 +565,7 @@ describe('sanitizeLog rules from the first real export', () => {
       {
         'Log index': '1',
         Outputs: JSON.stringify({
-          result: param('Result', `{"returnCode":0,"data":"${invoice} ..."}`),
+          result: param('Result', `{"returnCode":0,"data":"${invoice} ...`),
           hash: param('Value', hex),
           id: param('Value', outlookId),
         }),
@@ -577,8 +577,24 @@ describe('sanitizeLog rules from the first real export', () => {
     const after = parseCsv(out.csv)
     if (!after.ok) throw new Error('parse failed')
     const result = parsePayload(after.rows[0]!.Outputs!).params[0]!
-    expect(result.value).toMatch(/"data":"blob\d+ \.\.\."/)
+    expect(result.value).toMatch(/"data":"blob\d+ \.\.\.$/)
     expect(result.truncated).toBe(true)
+  })
+
+  it('replaces shorter blob prefixes that PAD truncated before its ... marker', () => {
+    const out = sanitizeRows([
+      {
+        'Log index': '1',
+        Outputs: JSON.stringify({
+          a: param('Value', 'eyJpbnZvaWNlTGlzdCI6W3siYnQiOiLmtZnms ...'),
+          b: param('Value', 'c80690330a383aaaf799f13cd...'),
+          c: param('Value', 'SortableDateTime ...'),
+        }),
+      },
+    ])
+    expect(out.csv).not.toContain('eyJpbnZvaWNlTGlzdCI6')
+    expect(out.csv).not.toContain('c80690330a383aaa')
+    expect(out.csv).toContain('SortableDateTime ...')
   })
 
   it('does not treat ordinary long names or paths as blobs', () => {
