@@ -26,7 +26,9 @@ export interface SanitizeResult {
 
 const GUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g
-const URL_RE = /\b(?:https?|file):\/\/[^\s"'<>]*/gi
+// file:// addresses are often typed by hand with spaces, so they run to a Windows-forbidden
+// character like paths do (an optional drive colon is allowed); web URLs stop at whitespace.
+const URL_RE = /\bfile:\/\/(?:\/?[A-Za-z]:)?[^:*?"<>|\r\n]*|\bhttps?:\/\/[^\s"'<>]*/gi
 // One path segment: no separator and no Windows-forbidden character.
 const SEG = String.raw`[^\\/:*?"<>|\r\n]+`
 // DOMAIN\account in any case. The domain must not continue a path (no separator, drive
@@ -246,10 +248,12 @@ class Sanitizer {
       if (v && typeof v === 'object') {
         // Keys can carry data too (dictionaries, data-table columns); generic keys pass unchanged.
         // Distinct keys can map to the same pseudonym (Acme/acme), so suffix repeats to keep every entry.
-        const out: Record<string, unknown> = {}
+        // A null-prototype object keeps keys like constructor and __proto__ as plain data.
+        const out = Object.create(null) as Record<string, unknown>
         for (const [k, x] of Object.entries(v)) {
-          let key = this.text(k)
-          for (let n = 2; key in out; n++) key = `${this.text(k)}_${n}`
+          const base = PAYLOAD_KEYS.has(k) ? k : this.text(k)
+          let key = base
+          for (let n = 2; Object.hasOwn(out, key); n++) key = `${base}_${n}`
           out[key] = walk(x)
         }
         return out
@@ -261,6 +265,8 @@ class Sanitizer {
 }
 
 const JSON_COLUMNS = new Set(['inputs', 'outputs'])
+// PAD's parameter structure; rewriting these would break parsePayload on the fixture.
+const PAYLOAD_KEYS = new Set(['localizedName', 'value', 'variableName'])
 
 function stringsOf(value: unknown): string[] {
   if (typeof value === 'string') return [value]
