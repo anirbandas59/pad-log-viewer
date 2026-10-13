@@ -1,7 +1,14 @@
 // Zustand store: history, notices, prompts, storage state and the active screen.
 import { create } from 'zustand'
 import { getSetting, openDb, setSetting, type PadDb } from '../core/storage/db.ts'
-import { clearHistory, deleteRun, listRuns, saveRun } from '../core/storage/history.ts'
+import {
+  clearHistory,
+  deleteRun,
+  getRun,
+  listRuns,
+  saveRun,
+  updateRun,
+} from '../core/storage/history.ts'
 import {
   STORAGE_WARNING_DISMISSED,
   checkStorageHealth,
@@ -18,6 +25,7 @@ import {
 } from '../core/storage/workspace.ts'
 import { classifyDrop, ingestCsv, mergeReplace, type IngestedRun } from '../core/model/ingest.ts'
 import type { HistoryQuery } from '../core/model/historyView.ts'
+import { deriveCsv, type DerivedRun } from '../core/derive/deriveRun.ts'
 import type { RunMeta } from '../core/model/types.ts'
 import { downloadText } from './download.ts'
 import {
@@ -44,6 +52,14 @@ export interface ReplacePrompt {
   existing: RunMeta
 }
 
+export type RunTab = 'overview' | 'log' | 'variables' | 'errors'
+
+/** The open run, re-derived from its stored CSV. */
+export type ActiveRun =
+  | { id: string; status: 'loading' }
+  | { id: string; status: 'ready'; derived: DerivedRun }
+  | { id: string; status: 'error'; error: string }
+
 export type Confirm = { kind: 'delete'; run: RunMeta } | { kind: 'clear' }
 
 export interface ImportPrompt {
@@ -66,6 +82,10 @@ interface State {
   query: HistoryQuery
   theme: Theme
   activeRunId: string | null
+  activeRun: ActiveRun | null
+  runTab: RunTab
+  /** Log index of the row selected in the execution log. */
+  selectedLogIndex: number | null
 
   init(): Promise<void>
   addFiles(files: readonly File[]): Promise<void>
@@ -81,6 +101,11 @@ interface State {
   setQuery(query: Partial<HistoryQuery>): void
   toggleTheme(): void
   openRun(id: string | null): void
+  setRunTab(tab: RunTab): void
+  /** Opens the execution log with this row selected. */
+  jumpToRow(logIndex: number): void
+  selectRow(logIndex: number | null): void
+  renameRun(id: string, displayName: string): Promise<void>
 }
 
 let nextNoticeId = 1
@@ -129,6 +154,9 @@ export const useStore = create<State>()((set, get) => {
     query: { text: '', status: 'all', tag: null, sort: 'imported' },
     theme: readStoredTheme(),
     activeRunId: null,
+    activeRun: null,
+    runTab: 'overview',
+    selectedLogIndex: null,
 
     init() {
       initializing ??= (async () => {
@@ -256,12 +284,12 @@ export const useStore = create<State>()((set, get) => {
         if (confirm.kind === 'delete') {
           if (db) await deleteRun(db, confirm.run.id)
           memory.delete(confirm.run.id)
-          if (get().activeRunId === confirm.run.id) set({ activeRunId: null })
+          if (get().activeRunId === confirm.run.id) set({ activeRunId: null, activeRun: null })
           if (!db) set((s) => ({ runs: s.runs.filter((r) => r.id !== confirm.run.id) }))
         } else {
           if (db) await clearHistory(db)
           memory.clear()
-          set({ activeRunId: null })
+          set({ activeRunId: null, activeRun: null })
           if (!db) set({ runs: [] })
         }
       } catch (err) {
@@ -358,7 +386,63 @@ export const useStore = create<State>()((set, get) => {
     },
 
     openRun(id) {
-      set({ activeRunId: id })
+      set({
+        activeRunId: id,
+        activeRun: id ? { id, status: 'loading' } : null,
+        runTab: 'overview',
+        selectedLogIndex: null,
+      })
+      if (!id) return
+      void (async () => {
+        let csv: string | undefined
+        try {
+          const { db, memory } = get()
+          csv = db ? (await getRun(db, id))?.csv : memory.get(id)
+        } catch {
+          csv = undefined
+        }
+        // Let the loading state paint before the synchronous parse and derive.
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        if (get().activeRunId !== id) return
+        if (csv === undefined) {
+          set({
+            activeRun: { id, status: 'error', error: 'The stored log of this run is missing.' },
+          })
+          return
+        }
+        const result = deriveCsv(csv)
+        if (get().activeRunId !== id) return
+        set({
+          activeRun: result.ok
+            ? { id, status: 'ready', derived: result.run }
+            : { id, status: 'error', error: result.error },
+        })
+      })()
+    },
+
+    setRunTab(tab) {
+      set({ runTab: tab })
+    },
+
+    jumpToRow(logIndex) {
+      set({ runTab: 'log', selectedLogIndex: logIndex })
+    },
+
+    selectRow(logIndex) {
+      set({ selectedLogIndex: logIndex })
+    },
+
+    async renameRun(id, displayName) {
+      const name = displayName.trim()
+      const current = get().runs.find((r) => r.id === id)
+      if (!name || !current || name === current.displayName) return
+      const { db } = get()
+      try {
+        if (db) await updateRun(db, id, { displayName: name })
+        set((s) => ({ runs: s.runs.map((r) => (r.id === id ? { ...r, displayName: name } : r)) }))
+      } catch (err) {
+        failed('Could not rename the run', err)
+      }
     },
   }
 })

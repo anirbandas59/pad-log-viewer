@@ -1,14 +1,10 @@
 import { Trash2 } from 'lucide-react'
+import { formatTicks } from '../../app/format.ts'
 import { useStore } from '../../app/store.ts'
 import { StatusPill } from '../../components/index.ts'
 import { formatDuration } from '../../core/model/format.ts'
 import { queryHistory } from '../../core/model/historyView.ts'
 import type { RunMeta } from '../../core/model/types.ts'
-
-/** Local date and time of a tick count (100 ns since the Unix epoch). */
-function formatTicks(ticks: bigint): string {
-  return new Date(Number(ticks / 10_000n)).toLocaleString()
-}
 
 function RunCard({ run }: { run: RunMeta }) {
   const openRun = useStore((s) => s.openRun)
