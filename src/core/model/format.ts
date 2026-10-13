@@ -29,7 +29,16 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(1)} ${units[unit]}`
 }
 
+/** Time since run start as `+mm:ss.fff` (or `+h:mm:ss.fff`), milliseconds truncated. */
 export function formatOffset(ticks: bigint): string {
-  void ticks
-  throw new Error('not implemented')
+  const sign = ticks < 0n ? '-' : '+'
+  const totalMs = (ticks < 0n ? -ticks : ticks) / 10_000n
+  const ms = Number(totalMs % 1000n)
+  const totalSeconds = Number(totalMs / 1000n)
+  const s = totalSeconds % 60
+  const m = Math.floor(totalSeconds / 60) % 60
+  const h = Math.floor(totalSeconds / 3600)
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
+  const clock = `${pad(m)}:${pad(s)}.${pad(ms, 3)}`
+  return h > 0 ? `${sign}${h}:${clock}` : `${sign}${clock}`
 }
