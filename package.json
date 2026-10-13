@@ -22,7 +22,6 @@
     "sanitize": "node scripts/sanitize-log.ts"
   },
   "dependencies": {
-    "@tanstack/react-table": "9.2.8",
     "@tanstack/react-virtual": "3.14.17",
     "idb": "8.0.4",
     "lucide-react": "1.55.0",
