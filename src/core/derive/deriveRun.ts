@@ -1,5 +1,6 @@
 // Per-row and per-run derivations over a normalized run.
-import type { NormalizedRun } from '../model/normalize.ts'
+import { parseCsv } from '../csv/parseCsv.ts'
+import { normalizeRows, type NormalizedRun } from '../model/normalize.ts'
 import type { LogRow } from '../model/types.ts'
 import { DEFAULT_DEPTH_RULES, computeDepths, type DepthRules } from './blocks.ts'
 import { effectSummary } from './effect.ts'
@@ -33,8 +34,17 @@ export function deriveRun(run: NormalizedRun, rules: DepthRules = DEFAULT_DEPTH_
 export type DeriveCsvResult =
   { ok: true; run: DerivedRun; runStart: bigint; runEnd: bigint } | { ok: false; error: string }
 
+/** Opens a stored run: parse, normalize and derive its raw CSV (stages 3–6). */
 export function deriveCsv(csv: string, rules: DepthRules = DEFAULT_DEPTH_RULES): DeriveCsvResult {
-  void csv
-  void rules
-  throw new Error('not implemented')
+  const parsed = parseCsv(csv)
+  if (!parsed.ok) return { ok: false, error: parsed.error.message }
+  const normalized = normalizeRows(parsed.rows, parsed.mapping)
+  if (normalized.rows.length === 0)
+    return { ok: false, error: 'The file has no readable log rows.' }
+  return {
+    ok: true,
+    run: deriveRun(normalized, rules),
+    runStart: normalized.runStart,
+    runEnd: normalized.runEnd,
+  }
 }
