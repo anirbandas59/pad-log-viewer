@@ -127,9 +127,10 @@ function Breakdown({
     <section className={card}>
       <h3 className={title}>{heading}</h3>
       <ul data-testid={testId} className="space-y-1.5">
-        {entries.map((e) => (
+        {entries.map((e, i) => (
           <li
-            key={e.value}
+            // "Other" may also be a real value: index keeps keys unique.
+            key={`${i}:${e.value}`}
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 text-sm"
           >
             <span className="truncate" title={e.value || '(none)'}>
