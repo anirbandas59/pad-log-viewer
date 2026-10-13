@@ -10,13 +10,18 @@ permissions:
   issues: write
   id-token: write
   actions: read
-
-concurrency:
-  group: claude-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  # gh pr checks reads check runs and commit statuses, so the reviewer can see CI.
+  checks: read
+  statuses: read
 
 jobs:
   review:
+    # Job-level, not workflow-level: a run whose job is skipped by `if` (e.g. the labeled event
+    # from the reviewer's own relabel, or a push without ready-for-review) never joins the
+    # group, so it can no longer cancel a review that is in progress.
+    concurrency:
+      group: claude-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     if: >-
       (github.event.action == 'labeled' && github.event.label.name == 'ready-for-review') ||
       (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'ready-for-review'))
