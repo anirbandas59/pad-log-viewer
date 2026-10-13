@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { expect, type Page } from '@playwright/test'
 
-export const APP = '/pad-log-viewer.html'
+// Relative to each project's baseURL: http://localhost:4173/ or file://…/dist/.
+export const APP = 'pad-log-viewer.html'
 export const REAL =
   'tests/fixtures/real/Invoice_Extraction_Main-00000000-0000-4000-8000-000000000007-20261012T113808Z.csv'
 export const FAILED =

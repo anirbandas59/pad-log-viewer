@@ -11,11 +11,18 @@ const HTML = resolve(DIST, 'pad-log-viewer.html')
 const FILE_URL = pathToFileURL(HTML).href
 const VERSION = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version
 
-/** Every request the page makes, and every CSP violation and console error it reports. */
+/**
+ * Every request the page starts, except those its CSP stopped before they were sent
+ * (Chromium reports those as failed with "csp"), and every CSP violation and console error.
+ */
 async function watch(page: Page) {
-  const requests: string[] = []
+  const started: string[] = []
+  const blocked: string[] = []
   const errors: string[] = []
-  page.on('request', (r) => requests.push(r.url()))
+  page.on('request', (r) => started.push(r.url()))
+  page.on('requestfailed', (r) => {
+    if (r.failure()?.errorText === 'csp') blocked.push(r.url())
+  })
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text())
   })
@@ -32,7 +39,16 @@ async function watch(page: Page) {
   })
   const violations = () =>
     page.evaluate(() => (window as unknown as { __csp: string[] }).__csp ?? [])
-  return { requests, errors, violations }
+  const requests = () => {
+    const left = [...blocked]
+    return started.filter((url) => {
+      const i = left.indexOf(url)
+      if (i < 0) return true
+      left.splice(i, 1)
+      return false
+    })
+  }
+  return { requests, blocked, errors, violations }
 }
 
 /** Only the page itself, and data:/blob: URLs it made in memory. */
@@ -85,7 +101,7 @@ test.describe('the built file', () => {
     await page.getByRole('tab', { name: 'Execution log' }).click()
     await expect(log.locator('[data-log-index="17"] [data-mark="note"]')).toBeVisible()
 
-    expect(seen.requests.filter((u) => !offline(u))).toEqual([])
+    expect(seen.requests().filter((u) => !offline(u))).toEqual([])
     expect(await seen.violations()).toEqual([])
     expect(seen.errors).toEqual([])
   })
@@ -111,7 +127,9 @@ test.describe('the built file', () => {
       return tries
     })
     expect(outcome).toEqual({ fetch: 'blocked', image: 'blocked' })
-    expect(seen.requests.filter((u) => !offline(u))).toEqual([])
+    // The image request was started, and stopped by the CSP before it was sent.
+    expect(seen.blocked).toEqual(['https://example.com/pixel.png'])
+    expect(seen.requests().filter((u) => !offline(u))).toEqual([])
     expect((await seen.violations()).map((v) => v.split(' ')[0])).toEqual([
       'connect-src',
       'img-src',
