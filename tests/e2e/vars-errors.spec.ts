@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { syntheticRun, toCsv } from '../unit/helpers/syntheticLog.ts'
-import { FAILED, REAL, cards, drop, fixture, openApp, openRun } from './helpers.ts'
+import { FAILED, REAL, cards, drop, fixture, openApp, openRun, storedSetting } from './helpers.ts'
 
 // 200 rows: Output "Result" writes var<i % 50> (so var7 at rows 7, 57, 107, 157) and
 // "Count" writes `count` on every row.
@@ -251,6 +251,9 @@ test.describe('density', () => {
     await compact.click()
     await expect(compact).toHaveAttribute('aria-pressed', 'true')
     await expect.poll(height).toBe(28)
+    // The choice is written to IndexedDB just after; reloading before that write commits
+    // would come back comfortable (failed once in CI on the v1 release candidate).
+    await expect.poll(() => storedSetting(page, 'logDensity')).toBe('compact')
     await page.reload()
     await openRun(page, 'Invoice_Processing_v2')
     await tab(page, 'Execution log').click()
