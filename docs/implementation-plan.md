@@ -33,13 +33,14 @@ The loop repeats per milestone: you dispatch the milestone, the cloud developer 
 
 ## Branching and review protocol
 
-Agents only ever push to `feature/*` branches; `dev` and `main` change only through pull requests you merge.
+Agents only ever push to `claude/*` (cloud session) or `feature/*` branches; `dev` and `main` change only through pull requests you merge.
 
 | Branch | Purpose | Who writes to it |
 | --- | --- | --- |
 | `main` | Bootstrap commit, then tagged releases only | You, by merging the release PR from `dev` |
 | `dev` | Integration branch; always builds and passes tests | You, by merging approved milestone PRs |
-| `feature/m<N>-<slug>` | One milestone each, e.g. `feature/m1-csv-core` | Cloud developer session |
+| `claude/<task>-<id>` | One milestone each; the branch the cloud session is assigned (cloud sessions can push only to it). The PR title `feat(m<N>): …` identifies the milestone | Cloud developer session |
+| `feature/m<N>-<slug>` | One milestone each when built in a local session, e.g. `feature/m1-csv-core`; slugs in the Milestones table | Local developer session |
 
 Both `main` and `dev` are protected on GitHub: PR required, CI must pass, no force-push. A hook also blocks agents from pushing to them, so the rule holds even if protection is misconfigured.
 
@@ -125,7 +126,7 @@ This is the complete set: one subagent, two skills, and the workflow .github/wor
 
 **Definition of done for a milestone:** `npm run check` green, every acceptance criterion ticked in the PR body with evidence, `docs/architecture.md` updated if behaviour differs from it.
 
-**Permissions.** Allow `npm run *`, `npx vitest`, `npx playwright`, `git` read and commit commands, `git push` to `feature/*`, and `gh pr` / `gh label`. Deny force-push, push to `main` or `dev`, reading `.env*`, and reading `*.csv` outside `tests/fixtures/`.
+**Permissions.** Allow `npm run *`, `npx vitest`, `npx playwright`, `git` read and commit commands, `git push` to `feature/*` and `claude/*`, and `gh pr` / `gh label`. Deny force-push, push to `main` or `dev`, reading `.env*`, and reading `*.csv` outside `tests/fixtures/`.
 
 **Hand-off to the cloud.** A milestone starts with `claude --cloud "/start-milestone <N>"` run from the repo on an up-to-date `dev`. You run it after each merge into `dev`, one command per milestone.
 
@@ -135,9 +136,10 @@ Hooks enforce the rules mechanically; they react to events inside a session but 
 
 | Event (matcher) | Runs in | What it does | Effect |
 | --- | --- | --- | --- |
-| `SessionStart` (`startup`, `resume`) | Both | Cloud: warn if the Node major version is not 24, then `npm ci` if `node_modules` is missing. Both: add context for Claude with branch, active milestone (from branch name) and any open review findings on its PR | Context only |
+| `SessionStart` (`startup`, `resume`) | Both | Cloud: set the maintainer git identity, warn if the Node major version is not 24, then `npm ci` if `node_modules` is missing. Both: add context for Claude with branch, active milestone (from branch name) and any open review findings on its PR | Context only |
 | `PreToolUse` (`Bash(git push *)`) | Both | Deny pushes to `main` or `dev` and any `--force` | Blocks |
-| `PreToolUse` (`Bash(git commit *)`) | Both | Deny if a staged `.csv` is outside `tests/fixtures/`; run `npm run check:fast` and deny on failure with the errors | Blocks |
+| `PreToolUse` (`Bash(git commit *)`) | Both | Deny a non-conventional or attributed message, an author other than the maintainer, or a staged `.csv` outside `tests/fixtures/`; run `npm run check:fast` and deny on failure with the errors | Blocks |
+| `PreToolUse` (`Bash(gh pr …)`, `gh api …/pulls`) | Both | Deny PR bodies, reviews and comments with attribution (Generated-with footer, session link, co-author lines) | Blocks |
 | `PreToolUse` (`Edit\|Write`) | Cloud | Deny edits to `.claude/**`, `CLAUDE.md` and `.github/workflows/**`, so the developer cannot weaken its own gates | Blocks |
 | `PostToolUse` (`Edit\|Write`) | Both | Prettier and ESLint `--fix` on the edited file; remaining lint errors returned to Claude as context | Feedback |
 | `Stop` | Cloud | If source changed since the last green run: `npm run check`; on failure exit 2 with a short summary so Claude keeps working. After 3 consecutive failures it lets Claude stop and report instead of looping | Prevents stopping |
@@ -150,19 +152,34 @@ The `PreToolUse` gates use `onFailure: "block"`, so a crashing or missing hook s
 
 Nine milestones, each one PR into `dev`, built bottom-up so every PR is testable on its own: logic first (M1–M3), UI next (M4–M7), shipping last (M8).
 
-| # | Branch | Scope | Key acceptance criteria |
+| # | Branch (local name; cloud uses `claude/*`) | Scope | Key acceptance criteria |
 | --- | --- | --- | --- |
 | M0 | `main` (local) | Bootstrap as above | `npm run check` green; repo, labels and protection in place |
 | M1 | `feature/m1-csv-core` | `fileName`, `parseCsv`, `schema`, `ticks`, `payload`, `normalize`; sanitizer script; synthetic fixtures incl. 10k rows | File-name parse handles underscores in flow names; sub-ms durations exact; truncated values flagged; malformed JSON keeps raw string; 10k rows parse + normalize < 1 s |
-| M1b | local, by you | Run the sanitizer on 2–3 real logs (one failed run, one with nested If/Loop) and commit to `tests/fixtures/` | Fixtures contain no usernames, client paths or project ids |
-| M2 | `feature/m2-derive` | Effect summary, block depth (configurable action list), variable index, run summary, search text | Depth rules verified on the real nested fixture; top-10 slowest correct; variable history ordered by Log index |
+| M1b | local, by you — **partly done**: one real export (successful run, nested blocks) is in `tests/fixtures/real/` (2026-10-13); a failed-run export is deferred to v1 validation | Run the sanitizer on 2–3 real logs (one failed run, one with nested If/Loop) and commit to `tests/fixtures/` | Fixtures contain no usernames, client paths or project ids |
+| M2 | `feature/m2-derive` | Effect summary, block depth (configurable action list), variable index, run summary, search text | Depth rules verified on a synthetic nested fixture (If/Loop/For each inside each other, with End rows); real-log check deferred to v1 validation; top-10 slowest correct; variable history ordered by Log index |
 | M3 | `feature/m3-storage` | IndexedDB schema, history, workspace export/import, persistence check | Tested with an in-memory IndexedDB; import merges by run GUID; bundle carries schema version |
-| M4 | `feature/m4-shell-home` | Theme tokens, app shell, drop zone, error cards, history list, storage banner, duplicate prompt | Multi-file drop; dark/light; works at 375, 768 and 1366 px |
+| M4 | `feature/m4-shell-home` | Theme tokens, app shell, drop zone, error cards, history list, storage banner, duplicate prompt (Replace only; keep-both deferred past v1) | Multi-file drop; dark/light; works at 375, 768 and 1366 px |
 | M5 | `feature/m5-run-overview` | Run header, tab scaffold, Overview tab | First-failure card jumps to its row; subflow time bars sum to run duration |
 | M6 | `feature/m6-log-drawer` | Virtualized log table, filter bar, column picker, keyboard shortcuts, row drawer, JSON tree, copy actions | 10k rows scroll without blank rows; filter update < 100 ms; drawer shows truncation badge |
 | M7 | `feature/m7-vars-errors` | Variables tab, Errors tab, bookmarks and notes, export filtered CSV, density toggle | Notes survive reload; exported CSV re-imports cleanly |
 | M8 | `feature/m8-ship` | Single-file build, CSP, Playwright e2e on `file://`, zero-network assertion, size budget, release workflow, README | Built HTML opens from disk in Chromium and works end to end; zero network requests; ≤ 1.5 MB |
-| Release | `dev` → `main` | A local session follows the release checklist in `CLAUDE.md` and opens the PR; you merge; tag `v1.0.0` builds the HTML | You open the HTML on a locked-down machine and on Windows Edge |
+| Release | `dev` → `main` | A local session follows the release checklist in `CLAUDE.md` and opens the PR; you merge; tag `v1.0.0` builds the HTML | You open the HTML on a locked-down machine and on Windows Edge; real-log validation (deferred M1b) passes |
+
+**Real-log validation (deferred M1b).** Until real exports are available, milestones verify against synthetic fixtures, and block opening/closing action names stay a configurable list. Before the v1 release you sanitize 2–3 real exports (one failed run, one with nested If/Loop) into `tests/fixtures/`, and every item `docs/architecture.md` leaves "to be confirmed against real logs" is checked against them: (1) the fixtures contain no usernames, client paths or project ids (re-probe the sanitizer's known leak cases in `.claude/agent-memory/reviewer/sanitizer-probe-checklist.md`); (2) the timestamp forms accepted by `ticks` (architecture: Parsing rules, Timestamps); (3) the file-name pattern and its export-timestamp format (architecture: File name; open question); (4) M2 block-depth rules and the opening/closing action names (architecture: Processing pipeline step 5.3; open question); (5) Inputs/Outputs parse as `{ localizedName, value, variableName }` JSON; (6) parse + normalize < 1 s on a real 10k-row log, and the 2–5 MB per-run storage estimate. Mismatches are fixed in a `fix(m<N>)` PR before the release PR. Done so far (2026-10-13), from the first real export in `tests/fixtures/real/`, pinned by `tests/unit/fixtures/realExport.test.ts`: (1) no client data after sanitizing with `--terms` and `--flow`, (2) ISO 7-digit timestamps, (3) the file-name format, (5) payload shape, (6) parse + normalize time on 1,235 rows, and the block-action counts for (4). M2 (2026-10-13) checks its depth rules against hand-worked spans of the same export in `tests/unit/fixtures/realDepth.test.ts`. For the final status of every check, see **Real-log validation result for v1** below.
+
+**Real-log validation result for v1 (2026-10-13)**, against the two real exports in `tests/fixtures/real/` (1,235-row successful run with nested blocks; 194-row failed run):
+
+| # | Check | Result | Evidence |
+| --- | --- | --- | --- |
+| 1 | No client data in fixtures | Pass (structural); one accepted exception | `tests/unit/fixtures/leakGuard.test.ts` fails CI on any e-mail, URL, GUID, user folder, 8+ digit run or encoded blob that is not a pseudonym. Free-text names are covered by `--terms`; the client name written in Chinese in two HTML templates was accepted by the maintainer (#14) |
+| 2 | Timestamp forms | Pass | ISO 8601, 7 fractional digits, `Z` (`realExport.test.ts`); US short form also appears inside payload values |
+| 3 | File-name format and export timestamp | Pass | `<flow>-<guid>-<yyyyMMddTHHmmssZ>.csv` (`realExport.test.ts`, `fileName.test.ts`) |
+| 4 | Block depth and action names | Pass | depth from Action index per subflow (`realDepth.test.ts`, 6 tests on the real export) |
+| 5 | Payload shape | Pass | 0 malformed, 159 truncated, `{ localizedName, value, variableName }` (`realExport.test.ts`) |
+| 6 | Parse + normalize + derive under 1 s; storage 2–5 MB per 10k rows | Pass | single cold run in a fresh process: 33–46 ms for the real export, 229–264 ms for 10,000 synthetic rows; raw CSV 483 KB per 1,235 rows ≈ 3.9 MB per 10,000 |
+
+**Failed-run real export: done (2026-10-13).** A second export of the same flow (194 rows, one `Failed` row: *Throw custom error* "System Unavailable Exception" after a SharePoint connector `NotFound`) is in `tests/fixtures/real/`, sanitized the same way and passing the leak guard. `tests/unit/fixtures/realFailedRun.test.ts` pins the failure path on it: exactly one failure (Log index 194), empty Log level and message with the error text in the payload, the Overview first failure, the Errors tab context (the three rows before it) and non-negative depth. A **real 10,000-row** log is **waived for v1 by the maintainer (2026-10-13)**: the budget is checked on 10,000 synthetic rows (229–264 ms cold).
 
 Milestones run one at a time: each starts from the `dev` that contains the previous merge, and parallel cloud sessions would share your plan's usage limits anyway.
 
@@ -176,14 +193,14 @@ Agents decide routine engineering matters themselves and stop for anything that 
 - A PR labelled `needs-human` after 3 review rounds.
 - Any deviation from the Architecture tab: a dependency outside the tech stack, a data-model change, anything that adds a network call.
 - Changes to `.claude/`, `CLAUDE.md` or CI workflows; the cloud developer is blocked from making them, so it proposes them in the PR body.
-- M1b: providing real logs for sanitized fixtures.
+- M1b: providing real logs for sanitized fixtures (deferred to v1 validation).
 - `dev` CI turning red after a merge, or a usage limit stopping a session.
 
 **Not escalated:** lint and formatting fixes, extra tests, refactors inside a milestone, Suggestion-level review findings.
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Cloud network blocks Playwright's browser download | E2E tests can't run in cloud sessions | Cloud runs unit tests only; e2e runs in GitHub Actions CI and locally |
+| Cloud network blocks Playwright's browser download | E2E tests can't run in cloud sessions | Cloud runs unit tests only; e2e runs in the CI `e2e` job (from 2026-10-13, ahead of M8) and locally |
 | Stop hook keeps failing | Session loops and burns usage | 3-failure cap, then the session stops and reports |
 | Auto-fix misreads a review comment | Wrong fix, extra rounds | Reviewer cites `file:line` and the expected behaviour; 3-round limit |
 | Developer and reviewer share blind spots | Bugs pass review | Reviewer works from the acceptance-criteria checklist, runs at higher effort, and you check UI screenshots in the PR |

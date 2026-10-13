@@ -1,0 +1,84 @@
+name: Review gate
+
+# Branch protection is unavailable on this plan, so nothing blocks a merge. This check goes red
+# unless the reviewer approved the exact commit being merged, so an unapproved PR shows a red ✗
+# next to the merge button. It reads the head and reviews live from the API (not from the
+# event payload), so re-running an old run judges the current state. It does not require the
+# `approved` label: review-pr posts the review before relabelling, so a label check would fail
+# the run triggered by the review itself. The APPROVE review of the head is the stronger signal.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  pull-requests: read
+
+concurrency:
+  # Per event type, so a labeled run cannot cancel the run triggered by the review.
+  group: review-gate-${{ github.event.pull_request.number }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  review-gate:
+    name: review-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require an approval of the head commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          node --input-type=module <<'EOF'
+          const { GH_TOKEN, REPO, PR, EVENT_HEAD_SHA } = process.env
+          const REVIEWER = 'claude[bot]'
+
+          // Fetches every page of a list endpoint and merges them into one array.
+          async function all(path) {
+            const items = []
+            for (let page = 1; ; page++) {
+              const res = await fetch(`https://api.github.com/repos/${REPO}/${path}?per_page=100&page=${page}`, {
+                headers: { authorization: `Bearer ${GH_TOKEN}`, accept: 'application/vnd.github+json' },
+              })
+              if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`)
+              const batch = await res.json()
+              items.push(...batch)
+              if (batch.length < 100) return items
+            }
+          }
+          async function one(path) {
+            const res = await fetch(`https://api.github.com/repos/${REPO}/${path}`, {
+              headers: { authorization: `Bearer ${GH_TOKEN}`, accept: 'application/vnd.github+json' },
+            })
+            if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`)
+            return res.json()
+          }
+          function fail(message) {
+            console.log(`::error::${message} Do not merge.`)
+            process.exit(1)
+          }
+
+          const pr = await one(`pulls/${PR}`)
+          const head = pr.head.sha
+          if (EVENT_HEAD_SHA && EVENT_HEAD_SHA !== head) {
+            fail(`This run is for ${EVENT_HEAD_SHA}, but the PR head is now ${head}; see the newer run.`)
+          }
+          console.log(`Head: ${head}`)
+
+          const reviews = (await all(`pulls/${PR}/reviews`)).filter((r) => r.user?.login === REVIEWER)
+          const latest = reviews.at(-1)
+          console.log(`Latest ${REVIEWER} review: ${latest ? `${latest.state} at ${latest.commit_id}` : 'none'}`)
+          if (!latest) fail(`${REVIEWER} has not reviewed this PR.`)
+          if (latest.commit_id !== head) fail(`${REVIEWER}'s latest review is of ${latest.commit_id}, not the head ${head}.`)
+          if (latest.state === 'COMMENTED') {
+            // review-pr falls back to a comment review; only its final line carries the verdict.
+            const last = (latest.body ?? '').replace(/\r/g, '').split('\n').filter((l) => l.trim()).at(-1) ?? ''
+            if (!/^Verdict:\s+APPROVE\s*$/.test(last)) fail(`The latest review's final line is not "Verdict: APPROVE".`)
+          } else if (latest.state !== 'APPROVED') {
+            fail(`${REVIEWER}'s latest review is ${latest.state}.`)
+          }
+          console.log(`Approved by ${REVIEWER} at ${head}.`)
+          EOF

@@ -1,0 +1,51 @@
+import { useStore } from '../../app/store.ts'
+import { ErrorsTab } from '../errors/index.ts'
+import { LogView } from '../log/index.ts'
+import { OverviewTab } from '../overview/index.ts'
+import { VariablesTab } from '../variables/index.ts'
+import { RunHeader } from './RunHeader.tsx'
+import { RunTabs } from './RunTabs.tsx'
+
+/** Run view: header, tabs and the selected tab's panel. */
+export function RunScreen({ id }: { id: string }) {
+  const run = useStore((s) => s.runs.find((r) => r.id === id))
+  const active = useStore((s) => s.activeRun)
+  const tab = useStore((s) => s.runTab)
+  const openRun = useStore((s) => s.openRun)
+
+  if (!run) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-muted">This run is no longer in history.</p>
+        <button type="button" className="text-sm underline" onClick={() => openRun(null)}>
+          Back to history
+        </button>
+      </div>
+    )
+  }
+  const derived = active?.id === id && active.status === 'ready' ? active.derived : undefined
+
+  return (
+    <div className="space-y-4">
+      <RunHeader run={run} summary={derived?.summary} />
+      <RunTabs />
+      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} tabIndex={0}>
+        {active?.status === 'error' ? (
+          <p className="rounded-md border border-failure/50 bg-failure/10 p-3 text-sm">
+            This run could not be opened: {active.error}
+          </p>
+        ) : !derived ? (
+          <p className="text-sm text-muted">Reading the log…</p>
+        ) : tab === 'overview' ? (
+          <OverviewTab run={derived} />
+        ) : tab === 'log' ? (
+          <LogView run={derived} />
+        ) : tab === 'variables' ? (
+          <VariablesTab run={derived} />
+        ) : (
+          <ErrorsTab run={derived} />
+        )}
+      </div>
+    </div>
+  )
+}

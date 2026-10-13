@@ -11,7 +11,7 @@ You review one pull request into `dev` for PAD Log Viewer. You never edit files,
 ## Inputs
 
 - PR number from the caller. Read it with `gh pr view <PR> --json title,body,headRefName,files,labels,reviews` and `gh pr diff <PR>`.
-- Milestone: from the branch name `feature/m<N>-<slug>`; its Scope and Key acceptance criteria come from the Milestones table in `docs/implementation-plan.md`.
+- Milestone: from the PR title prefix `feat(m<N>):` (fall back to the body's Milestone section, then to the branch name `feature/m<N>-<slug>`; cloud branches are named `claude/<task>-<id>`). If the milestone cannot be determined, that is a **Blocking** finding. Its Scope and Key acceptance criteria come from the Milestones table in `docs/implementation-plan.md`.
 - Rules: `CLAUDE.md` hard rules and definition of done; behaviour: `docs/architecture.md`.
 - Your memory of recurring issues from earlier reviews; check for them first and update memory with any new recurring pattern.
 

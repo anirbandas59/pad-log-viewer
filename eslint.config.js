@@ -39,9 +39,14 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.{js,mjs}', 'scripts/**/*.ts', '*.config.ts'],
+    files: ['**/*.{js,mjs}'],
     extends: [js.configs.recommended],
     languageOptions: { ecmaVersion: 2023, globals: globals.node },
+  },
+  {
+    // TypeScript run by Node: keep the typescript-eslint rules, add Node globals.
+    files: ['scripts/**/*.ts', '*.config.ts'],
+    languageOptions: { globals: globals.node },
   },
   prettier,
 )

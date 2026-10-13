@@ -21,7 +21,7 @@ failClosed('guard-push', async () => {
       )
     ) {
       deny(
-        'Force-push, --mirror, --all and branch deletion are not allowed. Push a normal commit to your feature/* branch.',
+        'Force-push, --mirror, --all and branch deletion are not allowed. Push a normal commit to your session (claude/*) or feature/* branch.',
       )
     }
     const positional = args.filter((a) => !a.startsWith('-'))
@@ -34,7 +34,7 @@ failClosed('guard-push', async () => {
     const bad = targets.filter((t) => PROTECTED.has(t) || t === 'HEAD')
     if (bad.length > 0) {
       deny(
-        `Pushing to ${bad.join(', ')} is not allowed. main and dev change only through PRs merged by the maintainer; push to feature/m<N>-<slug> instead.`,
+        `Pushing to ${bad.join(', ')} is not allowed. main and dev change only through PRs merged by the maintainer; push to your session (claude/*) or feature/m<N>-<slug> branch instead.`,
       )
     }
   }

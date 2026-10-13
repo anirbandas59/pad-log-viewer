@@ -1,3 +1,5 @@
 * text=auto eol=lf
 *.png binary
 *.ico binary
+# Fixtures are real exports: keep their bytes (CRLF, BOM) exactly as written.
+tests/fixtures/**/*.csv -text

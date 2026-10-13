@@ -1,5 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
       "Bash(npm run *)",
@@ -24,6 +29,9 @@
       "Bash(git push origin feature/*)",
       "Bash(git push -u origin feature/*)",
       "Bash(git push --set-upstream origin feature/*)",
+      "Bash(git push origin claude/*)",
+      "Bash(git push -u origin claude/*)",
+      "Bash(git push --set-upstream origin claude/*)",
       "Bash(gh pr *)",
       "Bash(gh label *)"
     ],
@@ -62,6 +70,11 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-push.mjs\"",
+            "onFailure": "block"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-pr-text.mjs\"",
             "onFailure": "block"
           },
           {
