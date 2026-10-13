@@ -513,3 +513,86 @@ describe('sanitizeLog file-name parts', () => {
     expect(parseFileName(odd.fileName).matched).toBe(true)
   })
 })
+
+// Leaks found by reviewing the first real fixture (2026-10-13).
+describe('sanitizeLog rules from the first real export', () => {
+  const sanitizeRows = (rows: Parameters<typeof row>[0][]) =>
+    sanitizeLog(toCsv(rows.map((r) => row(r))), { fileName: 'x.csv' })
+
+  it('removes e-mail display names, here and elsewhere in the log', () => {
+    const out = sanitizeRows([
+      {
+        'Log index': '1',
+        Inputs: JSON.stringify({
+          From: param('Value', '"Das, Anirban SOMIBM-SOM-IBM" <adas@corp.example.com>'),
+          To: param('Value', 'Jane Mallory <jane@client.com>'),
+        }),
+      },
+      { 'Log index': '2', 'Log message': 'Approved by Anirban for Mallory (SOMIBM-SOM-IBM)' },
+    ])
+    const lower = out.csv.toLowerCase()
+    for (const s of ['anirban', 'somibm', 'mallory', 'adas', 'jane']) {
+      expect(lower, s).not.toContain(s)
+    }
+    expect(out.residual).toEqual([])
+  })
+
+  it('removes values read from environment variables, such as the machine name', () => {
+    const out = sanitizeRows([
+      {
+        'Log index': '1',
+        Outputs: JSON.stringify({
+          value: param('Environment variable value', 'AENNW04006PAD12', 'txt_ResourceName'),
+        }),
+      },
+      {
+        'Log index': '2',
+        Inputs: JSON.stringify({ text: param('Text to trim', 'AENNW04006PAD12') }),
+      },
+    ])
+    expect(out.csv.toLowerCase()).not.toContain('aennw04006pad12')
+    expect(out.residual).toEqual([])
+  })
+
+  it('replaces long base64 and hex blobs, keeping the truncation marker', () => {
+    const invoice = Buffer.from(
+      JSON.stringify({ invoiceList: [{ seller: 'Zhejiang Acme Trading Co', amount: 1234.5 }] }),
+    ).toString('base64')
+    const hex = 'c80690330a383aaaf799f13cd3e7f5c4d1922326'
+    const outlookId =
+      'AAMkADA4MjhlZTQyLTUzOGQtNDg2My1iNWJiLTA0NGVlNGNiZDA4YgBGAAAAAADws8Ej3k0qR5ySiqrnZbXI'
+    const out = sanitizeRows([
+      {
+        'Log index': '1',
+        Outputs: JSON.stringify({
+          result: param('Result', `{"returnCode":0,"data":"${invoice} ..."}`),
+          hash: param('Value', hex),
+          id: param('Value', outlookId),
+        }),
+      },
+    ])
+    for (const blob of [invoice, hex, outlookId]) {
+      expect(out.csv).not.toContain(blob.slice(0, 24))
+    }
+    const after = parseCsv(out.csv)
+    if (!after.ok) throw new Error('parse failed')
+    const result = parsePayload(after.rows[0]!.Outputs!).params[0]!
+    expect(result.value).toMatch(/"data":"blob\d+ \.\.\."/)
+    expect(result.truncated).toBe(true)
+  })
+
+  it('does not treat ordinary long names or paths as blobs', () => {
+    const out = sanitizeRows([
+      {
+        'Log index': '1',
+        Inputs: JSON.stringify({
+          v: param('Value', 'AttachmentUnprocessedListForTheCurrentRunOfTheFlow'),
+          p: param('Path', 'C:\\Robot\\Inbox\\Reports2026\\October\\Daily\\Summary\\file1.xlsx'),
+        }),
+      },
+    ])
+    expect(out.csv).toContain('AttachmentUnprocessedListForTheCurrentRunOfTheFlow')
+    expect(out.csv).toMatch(/C:\\\\[^"]*\.xlsx/)
+    expect(out.csv).not.toMatch(/blob\d/)
+  })
+})
