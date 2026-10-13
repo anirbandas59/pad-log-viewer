@@ -66,15 +66,13 @@ test.describe('multi-file drop', () => {
   })
 
   test('Browse files accepts several files at once', async ({ page }) => {
-    await page
-      .getByTestId('file-input')
-      .setInputFiles(
-        [REAL, NESTED].map((p) => ({
-          name: basename(p),
-          mimeType: 'text/csv',
-          buffer: readFileSync(p),
-        })),
-      )
+    await page.getByTestId('file-input').setInputFiles(
+      [REAL, NESTED].map((p) => ({
+        name: basename(p),
+        mimeType: 'text/csv',
+        buffer: readFileSync(p),
+      })),
+    )
     await expect(cards(page)).toHaveCount(2)
   })
 
@@ -102,6 +100,10 @@ test.describe('multi-file drop', () => {
     const dialog = page.getByRole('dialog')
     await expect(dialog).toContainText('already in history')
     await expect(dialog.getByRole('button', { name: /keep both/i })).toHaveCount(0)
+    // The same re-export again while its question is open: not "already in history".
+    await drop(page, [reExport])
+    await expect(page.getByTestId('notice').last()).toContainText('waiting for your answer')
+    await expect(page.getByRole('dialog')).toHaveCount(1)
     await dialog.getByRole('button', { name: 'Replace' }).click()
     await expect(dialog).toHaveCount(0)
     await expect(cards(page)).toHaveCount(1)
@@ -156,6 +158,10 @@ test.describe('storage', () => {
   test('warns that history may be cleared, until "Don\'t show again"', async ({ page }) => {
     const banner = page.getByTestId('storage-banner')
     await expect(banner).toContainText('History is kept in this browser only and may be cleared')
+    // Nothing to export yet.
+    await expect(banner.getByRole('button', { name: 'Export now' })).toBeDisabled()
+    await drop(page, [fixture(NESTED)])
+    await expect(banner.getByRole('button', { name: 'Export now' })).toBeEnabled()
     await banner.getByRole('button', { name: "Don't show again" }).click()
     await expect(banner).toHaveCount(0)
     await page.reload()

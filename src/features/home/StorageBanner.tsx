@@ -9,6 +9,7 @@ export function StorageBanner() {
   const dismissed = useStore((s) => s.bannerDismissed)
   const dismiss = useStore((s) => s.dismissBanner)
   const exportAll = useStore((s) => s.exportAll)
+  const empty = useStore((s) => s.runs.length === 0)
   if (!health) return null
 
   const sessionOnly = !health.indexedDb
@@ -28,7 +29,9 @@ export function StorageBanner() {
       </p>
       {!sessionOnly && (
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => void exportAll()}>Export now</Button>
+          <Button disabled={empty} onClick={() => void exportAll()}>
+            Export now
+          </Button>
           <Button variant="ghost" onClick={() => void dismiss()}>
             Don't show again
           </Button>
