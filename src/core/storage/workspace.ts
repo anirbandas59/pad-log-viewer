@@ -1,7 +1,6 @@
 // Workspace bundle export/import.
 import type { Annotation, OverallStatus, RunMeta } from '../model/types.ts'
 import type { PadDb } from './db.ts'
-import { listRuns } from './history.ts'
 
 export const WORKSPACE_FORMAT = 'pad-log-viewer-workspace'
 /** Bundle layout version; bump it, and keep reading older versions, when the layout changes. */
@@ -49,28 +48,49 @@ function toWorkspaceAnnotation({ logIndex, kind, text, createdAt }: Annotation) 
   return annotation
 }
 
-/** Every run in history with its raw CSV and annotations, newest import first. */
-export async function exportWorkspace(db: PadDb, now: Date = new Date()): Promise<WorkspaceBundle> {
-  const metas = await listRuns(db)
-  const tx = db.transaction(['files', 'annotations'])
+export interface WorkspaceExport {
+  bundle: WorkspaceBundle
+  /** Runs left out because their raw CSV is missing, so they could not be re-derived on import. */
+  missing: string[]
+}
+
+/**
+ * Every run in history with its raw CSV and annotations, newest import first, read in one
+ * transaction so the bundle is a consistent snapshot.
+ */
+export async function exportWorkspace(db: PadDb, now: Date = new Date()): Promise<WorkspaceExport> {
+  const tx = db.transaction(['runs', 'files', 'annotations'])
   const files = tx.objectStore('files')
   const byRun = tx.objectStore('annotations').index('runId')
-  const runs = await Promise.all(
-    metas.map(async (meta): Promise<WorkspaceRun> => {
+  const metas = (await tx.objectStore('runs').index('importedAt').getAll()).reverse()
+  const entries = await Promise.all(
+    metas.map(async (meta) => {
       const [csv, annotations] = await Promise.all([files.get(meta.id), byRun.getAll(meta.id)])
-      return {
-        meta,
-        csv: csv ?? '',
-        annotations: annotations.sort((a, b) => a.id! - b.id!).map(toWorkspaceAnnotation),
-      }
+      return { meta, csv, annotations }
     }),
   )
   await tx.done
+  const runs: WorkspaceRun[] = []
+  const missing: string[] = []
+  for (const { meta, csv, annotations } of entries) {
+    if (csv === undefined) {
+      missing.push(meta.id)
+      continue
+    }
+    runs.push({
+      meta,
+      csv,
+      annotations: annotations.sort((a, b) => a.id! - b.id!).map(toWorkspaceAnnotation),
+    })
+  }
   return {
-    format: WORKSPACE_FORMAT,
-    schemaVersion: WORKSPACE_SCHEMA_VERSION,
-    exportedAt: now.toISOString(),
-    runs,
+    bundle: {
+      format: WORKSPACE_FORMAT,
+      schemaVersion: WORKSPACE_SCHEMA_VERSION,
+      exportedAt: now.toISOString(),
+      runs,
+    },
+    missing,
   }
 }
 
@@ -110,8 +130,9 @@ function int(obj: Record<string, unknown>, key: string, where: string): number {
 
 function ticks(obj: Record<string, unknown>, key: string, where: string): bigint {
   const value = obj[key]
-  if (typeof value !== 'string' || !/^-?\d+$/.test(value))
-    throw new BundleError(`${where}: "${key}" must be a whole number of ticks.`)
+  // Timestamps count from the Unix epoch and durations are end − start: never negative.
+  if (typeof value !== 'string' || !/^\d+$/.test(value))
+    throw new BundleError(`${where}: "${key}" must be a non-negative whole number of ticks.`)
   return BigInt(value)
 }
 

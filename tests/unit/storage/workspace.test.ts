@@ -58,7 +58,8 @@ function bundleOf(...runs: WorkspaceBundle['runs']): WorkspaceBundle {
 
 describe('exportWorkspace', () => {
   it('carries the schema version, format and export time', async () => {
-    const bundle = await exportWorkspace(db, NOW)
+    const { bundle, missing } = await exportWorkspace(db, NOW)
+    expect(missing).toEqual([])
     expect(bundle).toEqual({
       format: 'pad-log-viewer-workspace',
       schemaVersion: 1,
@@ -79,7 +80,7 @@ describe('exportWorkspace', () => {
       createdAt: 't1',
     })
     await addAnnotation(db, { runId: A.id, kind: 'note', text: 'retry on Monday', createdAt: 't2' })
-    const bundle = await exportWorkspace(db, NOW)
+    const { bundle } = await exportWorkspace(db, NOW)
     expect(bundle.runs.map((r) => r.meta.id)).toEqual([B.id, A.id])
     const a = bundle.runs.find((r) => r.meta.id === A.id)!
     expect(a.meta).toEqual(A)
@@ -89,6 +90,15 @@ describe('exportWorkspace', () => {
       { kind: 'note', text: 'retry on Monday', createdAt: 't2' },
     ])
     expect(bundle.runs.find((r) => r.meta.id === B.id)!.annotations).toEqual([])
+  })
+
+  it('leaves out, and reports, a run whose raw CSV is missing instead of exporting it empty', async () => {
+    await saveRun(db, A, CSV)
+    await saveRun(db, B, 'b csv')
+    await db.delete('files', A.id)
+    const { bundle, missing } = await exportWorkspace(db, NOW)
+    expect(missing).toEqual([A.id])
+    expect(bundle.runs.map((r) => r.meta.id)).toEqual([B.id])
   })
 })
 
@@ -161,6 +171,8 @@ describe('serializeWorkspace / parseWorkspace', () => {
     ['a run without CSV', { ...goodRun, csv: undefined }],
     ['a run without an id', { ...goodRun, meta: { ...goodRun.meta, id: '' } }],
     ['a non-integer tick value', { ...goodRun, meta: { ...goodRun.meta, runStart: '1.5' } }],
+    ['a negative duration', { ...goodRun, meta: { ...goodRun.meta, durationTicks: '-1' } }],
+    ['a negative timestamp', { ...goodRun, meta: { ...goodRun.meta, runEnd: '-5' } }],
     ['a non-numeric row count', { ...goodRun, meta: { ...goodRun.meta, rowCount: 'many' } }],
     [
       'an unknown overall status',
@@ -288,7 +300,7 @@ describe('importWorkspace', () => {
       text: '',
       createdAt: 't1',
     })
-    const text = serializeWorkspace(await exportWorkspace(db, NOW))
+    const text = serializeWorkspace((await exportWorkspace(db, NOW)).bundle)
     db.close()
 
     db = await otherMachine()
