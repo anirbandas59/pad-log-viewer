@@ -43,7 +43,8 @@ export function RunTabs() {
             role="tab"
             id={`tab-${t.id}`}
             aria-selected={selected}
-            aria-controls={`panel-${t.id}`}
+            // Only the selected tab's panel is in the page.
+            aria-controls={selected ? `panel-${t.id}` : undefined}
             tabIndex={selected ? 0 : -1}
             onClick={() => setTab(t.id)}
             className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-accent ${

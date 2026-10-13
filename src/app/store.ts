@@ -27,6 +27,13 @@ import { classifyDrop, ingestCsv, mergeReplace, type IngestedRun } from '../core
 import type { HistoryQuery } from '../core/model/historyView.ts'
 import { deriveCsv, type DerivedRun } from '../core/derive/deriveRun.ts'
 import type { RunMeta } from '../core/model/types.ts'
+import { EMPTY_FILTERS, type LogFilters } from '../core/derive/filter.ts'
+import {
+  defaultColumnVisibility,
+  readColumnVisibility,
+  type ColumnVisibility,
+  type LogColumnId,
+} from '../core/derive/columns.ts'
 import { downloadText } from './download.ts'
 import {
   THEME_SETTING,
@@ -62,6 +69,9 @@ export type ActiveRun =
 
 export type Confirm = { kind: 'delete'; run: RunMeta } | { kind: 'clear' }
 
+/** Settings-store key for the execution log's column visibility. */
+export const LOG_COLUMNS_SETTING = 'logColumns'
+
 export interface ImportPrompt {
   bundle: WorkspaceBundle
   conflicts: RunMeta[]
@@ -86,6 +96,12 @@ interface State {
   runTab: RunTab
   /** Log index of the row selected in the execution log. */
   selectedLogIndex: number | null
+  /** Bumped by every jumpToRow, so a jump to the already selected row still scrolls. */
+  jumpSeq: number
+  /** The row drawer is open on the selected row. */
+  drawerOpen: boolean
+  logFilters: LogFilters
+  logColumns: ColumnVisibility
 
   init(): Promise<void>
   addFiles(files: readonly File[]): Promise<void>
@@ -104,7 +120,12 @@ interface State {
   setRunTab(tab: RunTab): void
   /** Opens the execution log with this row selected. */
   jumpToRow(logIndex: number): void
-  selectRow(logIndex: number | null): void
+  /** Selects a row; `open` also opens (true) or closes (false) the drawer. */
+  selectRow(logIndex: number | null, open?: boolean): void
+  setDrawerOpen(open: boolean): void
+  setLogFilters(filters: Partial<LogFilters>): void
+  clearLogFilters(): void
+  setColumnVisible(id: LogColumnId, visible: boolean): void
   renameRun(id: string, displayName: string): Promise<void>
 }
 
@@ -157,6 +178,10 @@ export const useStore = create<State>()((set, get) => {
     activeRun: null,
     runTab: 'overview',
     selectedLogIndex: null,
+    jumpSeq: 0,
+    drawerOpen: false,
+    logFilters: EMPTY_FILTERS,
+    logColumns: defaultColumnVisibility(),
 
     init() {
       initializing ??= (async () => {
@@ -172,11 +197,13 @@ export const useStore = create<State>()((set, get) => {
           if (!db) throw new Error('IndexedDB unavailable')
         })
         let bannerDismissed = false
+        let logColumns = get().logColumns
         if (db) {
           // Settings are best effort: a failed read or write (e.g. storage full) must not
           // stop history from loading.
           try {
             bannerDismissed = (await getSetting<boolean>(db, STORAGE_WARNING_DISMISSED)) === true
+            logColumns = readColumnVisibility(await getSetting(db, LOG_COLUMNS_SETTING))
             // localStorage is the authority; the stored copy fills in only when it is empty
             // and the user has not toggled the theme while the database was opening.
             const saved = await getSetting(db, THEME_SETTING)
@@ -192,7 +219,7 @@ export const useStore = create<State>()((set, get) => {
             // Keep the defaults.
           }
         }
-        set({ db, health, bannerDismissed, ready: true })
+        set({ db, health, bannerDismissed, logColumns, ready: true })
         await refresh()
       })()
       return initializing
@@ -391,6 +418,8 @@ export const useStore = create<State>()((set, get) => {
         activeRun: id ? { id, status: 'loading' } : null,
         runTab: 'overview',
         selectedLogIndex: null,
+        drawerOpen: false,
+        logFilters: EMPTY_FILTERS,
       })
       if (!id) return
       void (async () => {
@@ -425,11 +454,37 @@ export const useStore = create<State>()((set, get) => {
     },
 
     jumpToRow(logIndex) {
-      set({ runTab: 'log', selectedLogIndex: logIndex })
+      set((s) => ({ runTab: 'log', selectedLogIndex: logIndex, jumpSeq: s.jumpSeq + 1 }))
     },
 
-    selectRow(logIndex) {
-      set({ selectedLogIndex: logIndex })
+    selectRow(logIndex, open) {
+      set((s) => ({
+        selectedLogIndex: logIndex,
+        drawerOpen: logIndex !== null && (open ?? s.drawerOpen),
+      }))
+    },
+
+    setDrawerOpen(open) {
+      set((s) => ({ drawerOpen: open && s.selectedLogIndex !== null }))
+    },
+
+    setLogFilters(filters) {
+      // Start of the filter's apply-to-render time; the log table ends the measure.
+      performance.mark('pad:filter:start')
+      set((s) => ({ logFilters: { ...s.logFilters, ...filters } }))
+    },
+
+    clearLogFilters() {
+      performance.mark('pad:filter:start')
+      set({ logFilters: EMPTY_FILTERS })
+    },
+
+    setColumnVisible(id, visible) {
+      const logColumns = readColumnVisibility({ ...get().logColumns, [id]: visible })
+      set({ logColumns })
+      const { db } = get()
+      // Best effort: the choice holds for this session even if it is not saved.
+      if (db) setSetting(db, LOG_COLUMNS_SETTING, logColumns).catch(() => {})
     },
 
     async renameRun(id, displayName) {

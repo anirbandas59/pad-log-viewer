@@ -69,3 +69,9 @@ export async function openApp(page: Page) {
   await page.goto(APP)
   await expect(page.getByRole('heading', { name: 'PAD Log Viewer' })).toBeVisible()
 }
+
+/** Opens a run from its history card (the card title button). */
+export async function openRun(page: Page, name: string) {
+  await cards(page).filter({ hasText: name }).getByRole('button', { name, exact: true }).click()
+  await expect(page.getByTestId('run-header')).toContainText(name)
+}

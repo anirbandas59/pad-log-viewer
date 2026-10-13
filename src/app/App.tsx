@@ -11,6 +11,8 @@ export default function App() {
   const toggleTheme = useStore((s) => s.toggleTheme)
   const activeRunId = useStore((s) => s.activeRunId)
   const next = theme === 'dark' ? 'light' : 'dark'
+  // The run view uses wide screens for the log table and its docked drawer.
+  const width = activeRunId ? 'max-w-[110rem]' : 'max-w-6xl'
 
   useEffect(() => {
     void init()
@@ -18,8 +20,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-bg text-fg">
-      <header className="border-b border-border">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
+      {/* Sticky and 3.5rem tall: the row drawer opens below it (top-14). */}
+      <header className="sticky top-0 z-40 border-b border-border bg-bg">
+        <div className={`mx-auto flex h-14 items-center gap-3 px-4 ${width}`}>
           <h1 className="flex-1 text-lg font-semibold">PAD Log Viewer</h1>
           <button
             type="button"
@@ -32,7 +35,7 @@ export default function App() {
           </button>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-5">
+      <main className={`mx-auto px-4 py-5 ${width}`}>
         {activeRunId ? <RunScreen id={activeRunId} /> : <HomeScreen />}
       </main>
       <Prompts />

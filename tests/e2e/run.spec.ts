@@ -2,17 +2,12 @@
 // the run duration.
 import { expect, test, type Page } from '@playwright/test'
 import { syntheticRun, toCsv } from '../unit/helpers/syntheticLog.ts'
-import { FAILED, REAL, cards, drop, fixture, openApp } from './helpers.ts'
+import { FAILED, REAL, cards, drop, fixture, openApp, openRun } from './helpers.ts'
 
 // 3,000 rows; failures at Log index 997, 1994 and 2991 (every 997th row).
 const LONG = {
   name: 'Long_Run-2b3c4d5e-6f70-4a8b-9c0d-1e2f3a4b5c6d-20261013T100000Z.csv',
   text: toCsv(syntheticRun(3000)),
-}
-
-async function openRun(page: Page, name: string) {
-  await cards(page).filter({ hasText: name }).getByRole('button', { name, exact: true }).click()
-  await expect(page.getByTestId('run-header')).toContainText(name)
 }
 
 const tab = (page: Page, name: string) => page.getByRole('tab', { name })
@@ -63,10 +58,10 @@ test.describe('overview', () => {
     await expect(card).toContainText('Action failed at step 997')
     await card.getByRole('button', { name: 'Jump to row' }).click()
     await expect(tab(page, 'Execution log')).toHaveAttribute('aria-selected', 'true')
-    const row = page.getByTestId('log-list').locator('[data-log-index="997"]')
+    const row = page.getByTestId('log-table').locator('[data-log-index="997"]')
     await expect(row).toHaveAttribute('aria-selected', 'true')
     await expect(row).toBeInViewport()
-    await expect(page.getByTestId('log-list').locator('[aria-selected="true"]')).toHaveCount(1)
+    await expect(page.getByTestId('log-table').locator('[aria-selected="true"]')).toHaveCount(1)
   })
 
   test('says so when the run has no failures', async ({ page }) => {
@@ -101,7 +96,7 @@ test.describe('overview', () => {
     await expect(slowest.first()).toContainText('Invoke web service')
     await slowest.first().getByRole('button').click()
     await expect(tab(page, 'Execution log')).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByTestId('log-list').locator('[data-log-index="12"]')).toHaveAttribute(
+    await expect(page.getByTestId('log-table').locator('[data-log-index="12"]')).toHaveAttribute(
       'aria-selected',
       'true',
     )
