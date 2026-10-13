@@ -168,6 +168,19 @@ Nine milestones, each one PR into `dev`, built bottom-up so every PR is testable
 
 **Real-log validation (deferred M1b).** Until real exports are available, milestones verify against synthetic fixtures, and block opening/closing action names stay a configurable list. Before the v1 release you sanitize 2–3 real exports (one failed run, one with nested If/Loop) into `tests/fixtures/`, and every item `docs/architecture.md` leaves "to be confirmed against real logs" is checked against them: (1) the fixtures contain no usernames, client paths or project ids (re-probe the sanitizer's known leak cases in `.claude/agent-memory/reviewer/sanitizer-probe-checklist.md`); (2) the timestamp forms accepted by `ticks` (architecture: Parsing rules, Timestamps); (3) the file-name pattern and its export-timestamp format (architecture: File name; open question); (4) M2 block-depth rules and the opening/closing action names (architecture: Processing pipeline step 5.3; open question); (5) Inputs/Outputs parse as `{ localizedName, value, variableName }` JSON; (6) parse + normalize < 1 s on a real 10k-row log, and the 2–5 MB per-run storage estimate. Mismatches are fixed in a `fix(m<N>)` PR before the release PR. Done so far (2026-10-13), from the first real export in `tests/fixtures/real/`, pinned by `tests/unit/fixtures/realExport.test.ts`: (1) no client data after sanitizing with `--terms` and `--flow`, (2) ISO 7-digit timestamps, (3) the file-name format, (5) payload shape, (6) parse + normalize time on 1,235 rows, and the block-action counts for (4). M2 (2026-10-13) checks its depth rules against hand-worked spans of the same export in `tests/unit/fixtures/realDepth.test.ts`. Still needed: a failed-run export, and depth checked on more exports.
 
+**Real-log validation result for v1 (2026-10-13)**, against the one real export in `tests/fixtures/real/` (1,235 rows, successful run, nested blocks):
+
+| # | Check | Result | Evidence |
+| --- | --- | --- | --- |
+| 1 | No client data in fixtures | Pass (structural); one accepted exception | `tests/unit/fixtures/leakGuard.test.ts` fails CI on any e-mail, URL, GUID, user folder, 8+ digit run or encoded blob that is not a pseudonym. Free-text names are covered by `--terms`; the client name written in Chinese in two HTML templates was accepted by the maintainer (#14) |
+| 2 | Timestamp forms | Pass | ISO 8601, 7 fractional digits, `Z` (`realExport.test.ts`); US short form also appears inside payload values |
+| 3 | File-name format and export timestamp | Pass | `<flow>-<guid>-<yyyyMMddTHHmmssZ>.csv` (`realExport.test.ts`, `fileName.test.ts`) |
+| 4 | Block depth and action names | Pass | depth from Action index per subflow (`realDepth.test.ts`, 6 tests on the real export) |
+| 5 | Payload shape | Pass | 0 malformed, 159 truncated, `{ localizedName, value, variableName }` (`realExport.test.ts`) |
+| 6 | Parse + normalize + derive under 1 s; storage 2–5 MB per 10k rows | Pass | single cold run in a fresh process: 33–46 ms for the real export, 229–264 ms for 10,000 synthetic rows; raw CSV 483 KB per 1,235 rows ≈ 3.9 MB per 10,000 |
+
+Not validated — **needs the maintainer's sign-off before the v1 release PR**: a **failed-run** real export (no real log with failures was available; failure handling is covered by synthetic fixtures and browser tests) and a **real 10,000-row** log (budget checked on synthetic 10,000 rows).
+
 Milestones run one at a time: each starts from the `dev` that contains the previous merge, and parallel cloud sessions would share your plan's usage limits anyway.
 
 ## Escalation and risks
