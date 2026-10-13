@@ -70,6 +70,14 @@ const USER_DIR = new RegExp(String.raw`(?<!\w)[A-Za-z]:[\\/]Users[\\/](${SEG})`,
 // \\host\share or //host/share; a preceding colon means a URL scheme, handled by URL_RE.
 const UNC_HOST = new RegExp(String.raw`(?<![\\/:])(?:\\\\|//)(${SEG})[\\/]`, 'g')
 const ONEDRIVE_ORG = /OneDrive - ([^\\/:*?"<>|\r\n]+)/gi
+// E-mail display names: "Das, Anirban ORG" <a@b.c>, or Jane Doe <a@b.c> at the start of a value
+// or after a list separator (an unquoted name mid-sentence would learn ordinary words).
+const DISPLAY_NAME =
+  /(?:"([^"<>\r\n]{2,80})"|(?:^|[,;:]\s*)([A-Za-z][^"<>\r\n,;:]{1,60}?))\s*<\s*[\w.+-]+@[\w-]+(?:\.[\w-]+)+\s*>/g
+// Long base64 or hex runs: encoded documents, OCR results, mailbox item ids, hashes, ciphertext.
+// PAD cuts long values and appends "...", so a run right before that marker counts from 20 chars.
+const BLOB =
+  /(?<![A-Za-z0-9+/=_-])(?:[A-Za-z0-9+/_-]{40,}={0,2}|[A-Za-z0-9+/_-]{20,39}(?= ?\.\.\.))(?![A-Za-z0-9+/=_-])/g
 const SHAREPOINT_SITE = /\/(?:sites|teams)\/([^/?#\s"'<>]+)/gi
 // Host labels that identify nobody; learning them would also rewrite our own pseudonyms.
 const HOST_NOISE = new Set(['www', 'com', 'net', 'org', 'co', 'example', 'test', 'localhost'])
@@ -155,6 +163,7 @@ class Pseudonyms {
     email: 0,
     url: 0,
     account: 0,
+    blob: 0,
     term: 0,
   }
   /** Lower-cased originals that must not survive. */
@@ -218,6 +227,9 @@ class Sanitizer {
     for (const m of text.matchAll(USER_DIR)) add(m[1])
     for (const m of text.matchAll(UNC_HOST)) add(m[1])
     for (const m of text.matchAll(ONEDRIVE_ORG)) add(m[1]?.trim())
+    for (const m of text.matchAll(DISPLAY_NAME)) {
+      for (const word of (m[1] ?? m[2] ?? '').split(/[\s,]+/)) add(word)
+    }
     for (const m of text.matchAll(EMAIL)) {
       const [local, domain = ''] = m[0].split('@')
       add(local)
@@ -305,6 +317,14 @@ class Sanitizer {
       pathRe,
       keepTrailingSpace((m) => this.path(m, sep)),
     )
+    out = out.replace(BLOB, (b) => {
+      // Needs letters and digits, and few slashes, so long names and joined paths are kept.
+      if (!/\d/.test(b) || !/[A-Za-z]/.test(b) || (b.match(/\//g)?.length ?? 0) > b.length / 10) {
+        return b
+      }
+      this.p.count('blob')
+      return this.p.get('blob', b, (n) => `blob${n}`)
+    })
     out = out.replace(ACCOUNT, (_m, _domain: string, user: string) => {
       this.p.count('account')
       return `DOMAIN${sep}` + this.p.get('account', user, (n) => `account${n}`)
@@ -388,7 +408,22 @@ export function sanitizeLog(csv: string, options: SanitizeOptions): SanitizeResu
     r.forEach((cell, i) => {
       if (!jsonCols.has(i)) return s.learn(cell)
       try {
-        stringsOf(JSON.parse(cell)).forEach((x) => s.learn(x))
+        const value: unknown = JSON.parse(cell)
+        stringsOf(value).forEach((x) => s.learn(x))
+        // Values read from environment variables (machine and user names) are removed everywhere.
+        for (const prm of Object.values(value && typeof value === 'object' ? value : {})) {
+          const { localizedName, value: v } = (prm ?? {}) as {
+            localizedName?: unknown
+            value?: unknown
+          }
+          if (
+            localizedName === 'Environment variable value' &&
+            typeof v === 'string' &&
+            v.trim().length >= 3
+          ) {
+            s.addTerm(v)
+          }
+        }
       } catch {
         s.learn(cell.replace(/\\\\/g, '\\'))
       }
