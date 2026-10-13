@@ -54,8 +54,8 @@ export function isNoise(row: Pick<LogRow, 'module' | 'action'>): boolean {
 
 /**
  * Rows matching every active filter, in their original order: AND across facets and
- * toggles, OR within a facet. "Bookmarked only" keeps the Log indexes in `bookmarked`. Search terms are matched against the precomputed,
- * lower-cased `searchText`.
+ * toggles, OR within a facet. "Bookmarked only" keeps the Log indexes in `bookmarked`.
+ * Search terms are matched against the precomputed, lower-cased `searchText`.
  */
 export function filterRows<T extends Row>(
   rows: readonly T[],

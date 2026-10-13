@@ -140,8 +140,16 @@ interface State {
   clearLogFilters(): void
   setColumnVisible(id: LogColumnId, visible: boolean): void
   setLogDensity(density: Density): void
-  /** Sets a row's bookmark and/or note in the open run, and saves them. */
-  setRowMark(logIndex: number, change: Partial<RowMark>): Promise<void>
+  /**
+   * Sets a row's bookmark and/or note and saves them. Changes are saved one at a time, each
+   * applied to the row as last saved, so quick changes (a note, then a bookmark) all keep.
+   * `change` may be worked out from that saved mark, e.g. to toggle the bookmark.
+   */
+  setRowMark(
+    runId: string,
+    logIndex: number,
+    change: Partial<RowMark> | ((saved: RowMark) => Partial<RowMark>),
+  ): Promise<void>
   /** Downloads the open run's rows that pass the current filters as a PAD CSV. */
   exportFilteredCsv(): void
   renameRun(id: string, displayName: string): Promise<void>
@@ -153,6 +161,8 @@ function bookmarkedIn(annotations: readonly Annotation[]): Set<number> {
 }
 
 let nextNoticeId = 1
+// Row-annotation saves, one after another (see setRowMark).
+let markQueue: Promise<unknown> = Promise.resolve()
 // Shared by every init() call: StrictMode runs effects twice in development.
 let initializing: Promise<void> | null = null
 
@@ -542,28 +552,36 @@ export const useStore = create<State>()((set, get) => {
       if (db) setSetting(db, LOG_DENSITY_SETTING, logDensity).catch(() => {})
     },
 
-    async setRowMark(logIndex, change) {
-      const runId = get().activeRunId
-      if (!runId) return
-      const current = get().annotations.filter((a) => a.logIndex === logIndex)
-      const next = nextRowAnnotations(current, change, new Date().toISOString())
-      const { db, memoryAnnotations } = get()
-      try {
+    setRowMark(runId, logIndex, change) {
+      const step = async () => {
+        const { db, memoryAnnotations } = get()
+        // The run's annotations as last saved, not as last rendered.
+        const saved = db ? await listAnnotations(db, runId) : (memoryAnnotations.get(runId) ?? [])
+        const current = saved.filter((a) => a.logIndex === logIndex)
+        const mark = rowMarks(current).get(logIndex) ?? { bookmarked: false, note: '' }
+        const next = nextRowAnnotations(
+          current,
+          typeof change === 'function' ? change(mark) : change,
+          new Date().toISOString(),
+        )
         let annotations: Annotation[]
         if (db) {
           annotations = await replaceRowAnnotations(db, runId, logIndex, next)
         } else {
           annotations = [
-            ...get().annotations.filter((a) => a.logIndex !== logIndex),
+            ...saved.filter((a) => a.logIndex !== logIndex),
             ...next.map((a) => ({ ...a, runId, logIndex })),
           ]
           memoryAnnotations.set(runId, annotations)
         }
         if (get().activeRunId === runId) set({ annotations })
-      } catch (err) {
+      }
+      const done = markQueue.then(step)
+      markQueue = done.catch(() => {})
+      return done.catch((err: unknown) => {
         failed('Could not save the bookmark or note', err)
         throw err
-      }
+      })
     },
 
     exportFilteredCsv() {

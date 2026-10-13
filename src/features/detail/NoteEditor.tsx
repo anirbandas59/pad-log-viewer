@@ -14,6 +14,8 @@ type Status = '' | 'Saving…' | 'Saved' | 'Not saved'
  */
 export function NoteEditor({ logIndex, mark }: { logIndex: number; mark: RowMark }) {
   const setRowMark = useStore((s) => s.setRowMark)
+  // The run this row belongs to, kept so a save on unmount still lands after the run closes.
+  const [runId] = useState(() => useStore.getState().activeRunId)
   const [note, setNote] = useState(mark.note)
   const [status, setStatus] = useState<Status>('')
   const pending = useRef<string | null>(null)
@@ -21,9 +23,10 @@ export function NoteEditor({ logIndex, mark }: { logIndex: number; mark: RowMark
   const mounted = useRef(true)
   const id = useId()
 
-  const save = (change: Partial<RowMark>) => {
+  const save = (change: Partial<RowMark> | ((saved: RowMark) => Partial<RowMark>)) => {
+    if (!runId) return
     if (mounted.current) setStatus('Saving…')
-    setRowMark(logIndex, change).then(
+    setRowMark(runId, logIndex, change).then(
       () => mounted.current && setStatus('Saved'),
       () => mounted.current && setStatus('Not saved'),
     )
@@ -55,7 +58,8 @@ export function NoteEditor({ logIndex, mark }: { logIndex: number; mark: RowMark
         <button
           type="button"
           aria-pressed={mark.bookmarked}
-          onClick={() => save({ bookmarked: !mark.bookmarked })}
+          // Toggled against the saved mark, so a quick double click turns it on and off.
+          onClick={() => save((saved) => ({ bookmarked: !saved.bookmarked }))}
           className={`inline-flex min-h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-accent ${
             mark.bookmarked
               ? 'border-accent bg-accent/15'

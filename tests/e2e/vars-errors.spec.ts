@@ -82,6 +82,53 @@ test.describe('bookmarks and notes', () => {
   })
 })
 
+test.describe('quick changes to the same row', () => {
+  // Each change is saved without waiting for the one before it to finish.
+  test('a note, then a bookmark straight away: both are kept', async ({ page }) => {
+    await openTab(page, fixture(FAILED), 'Invoice_Processing_v2', 'Execution log')
+    await row(page, 12).click()
+    const d = drawer(page)
+    await d.getByRole('textbox', { name: 'Note' }).fill('note first')
+    // The click blurs the note box, which saves the note; the bookmark save follows at once.
+    await d.getByRole('button', { name: 'Bookmark' }).click()
+    await expect(d.getByRole('button', { name: 'Bookmark' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await expect(d.getByTestId('note-status')).toHaveText('Saved')
+
+    await page.reload()
+    await openRun(page, 'Invoice_Processing_v2')
+    await tab(page, 'Execution log').click()
+    await row(page, 12).click()
+    await expect(drawer(page).getByRole('button', { name: 'Bookmark' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await expect(drawer(page).getByRole('textbox', { name: 'Note' })).toHaveValue('note first')
+  })
+
+  test('a double click on Bookmark turns it on and off again', async ({ page }) => {
+    await openTab(page, fixture(FAILED), 'Invoice_Processing_v2', 'Execution log')
+    await row(page, 12).click()
+    const bookmark = drawer(page).getByRole('button', { name: 'Bookmark' })
+    await bookmark.dblclick()
+    await expect(drawer(page).getByTestId('note-status')).toHaveText('Saved')
+    await expect(bookmark).toHaveAttribute('aria-pressed', 'false')
+    await expect(row(page, 12).locator('[data-mark="bookmark"]')).toHaveCount(0)
+  })
+
+  test('a note still waiting to be saved is kept when leaving the run', async ({ page }) => {
+    await openTab(page, fixture(FAILED), 'Invoice_Processing_v2', 'Execution log')
+    await row(page, 7).click()
+    await drawer(page).getByRole('textbox', { name: 'Note' }).fill('typed, then left')
+    await page.getByRole('button', { name: 'Back to history' }).click()
+    await openRun(page, 'Invoice_Processing_v2')
+    await tab(page, 'Execution log').click()
+    await expect(row(page, 7).locator('[data-mark="note"]')).toBeVisible()
+  })
+})
+
 test.describe('export filtered CSV', () => {
   test('exports the filtered rows, and the file re-imports as its own run', async ({ page }) => {
     await openTab(page, fixture(FAILED), 'Invoice_Processing_v2', 'Execution log')
