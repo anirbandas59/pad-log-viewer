@@ -7,7 +7,10 @@
   --color-fg: #e6e8eb;
   --color-muted: #9aa1ab;
   --color-surface: #171a21;
+  --color-raised: #1f232c;
   --color-border: #2a2f3a;
+  --color-accent: #58a6ff;
+  --color-on-accent: #0f1115;
   --color-success: #3fb950;
   --color-failure: #f85149;
   --color-warning: #d29922;
@@ -20,7 +23,10 @@
   --color-fg: #1f2328;
   --color-muted: #59636e;
   --color-surface: #f6f8fa;
+  --color-raised: #eef1f4;
   --color-border: #d1d9e0;
+  --color-accent: #0969da;
+  --color-on-accent: #ffffff;
   --color-success: #1a7f37;
   --color-failure: #cf222e;
   --color-warning: #9a6700;
@@ -31,4 +37,6 @@
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-fg);
 }

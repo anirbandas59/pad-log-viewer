@@ -222,7 +222,7 @@ Three in-memory types drive the UI (`LogRow`, `RunMeta`, `Annotation`); IndexedD
 
 ### RunMeta (in memory and stored)
 
-`id` (run GUID from the file name; generated if the name doesn't match), `flowName`, `fileName`, `exportedAt`, `runStart`, `runEnd`, `durationTicks`, `rowCount`, `subflowCount`, `failureCount`, `overallStatus`, `importedAt`, `tags[]`, `displayName` (user-editable).
+`id` (run GUID from the file name; if the name doesn't match, `local-<16 hex>` hashed from the file content, so the same file dropped again under any name is still recognised — `contentRunId` in `ingest.ts`), `flowName`, `fileName`, `exportedAt`, `runStart`, `runEnd`, `durationTicks`, `rowCount`, `subflowCount`, `failureCount`, `overallStatus`, `importedAt`, `tags[]`, `displayName` (user-editable).
 
 ### IndexedDB schema (database `pad-log-viewer`, version 1)
 
@@ -294,10 +294,14 @@ The UI has two screens, Home and Run view, and is designed failure-first: openin
 
 ### Home screen
 
-- **Drop zone** across the top: drag one or more CSVs, or click "Browse files". Invalid files show an inline error card naming the problem.
+- **Drop zone** across the top: drag one or more CSVs, or click "Browse files". Invalid files show an inline error card naming the problem (not a `.csv`, missing columns, no readable rows); valid files in the same drop are still added. `ingest.ts` turns each file into a `RunMeta` (stages 1–4 plus the run summary); `classifyDrop` decides what happens next:
+  - new run: saved to history;
+  - same export dropped again: a note says it is already in history, nothing changes;
+  - re-export of a stored run: a dialog offers **Replace** or Cancel (no "keep both" in v1). Replace keeps the stored run's display name, tags, bookmarks and notes.
 - **History list** below: one card per run with display name, flow name, run start, duration, status pill, failure count and tags. Newest first.
 - **Controls:** search by name, filter by status and tag, sort by date or duration.
-- **Footer:** storage indicator (used space, persistence state), Export workspace, Import workspace.
+- **Footer:** storage indicator (used space, persistence state), Export workspace, Import workspace, Clear all history. Workspace import asks once whether to overwrite the runs already in history ("Overwrite" / "Keep mine"); export and import are off in session-only mode.
+- **Session-only mode:** when IndexedDB cannot be opened, runs are kept in memory for the tab and the banner says so instead of offering "Don't show again".
 
 ### Run view
 
@@ -341,7 +345,7 @@ The UI has two screens, Home and Run view, and is designed failure-first: openin
 
 - **Status colours:** Succeeded green, Failed red, warning amber, unknown grey. Status is always paired with an icon so colour is never the only signal.
 - **Subflow colours:** assigned from a 10-colour palette by hashing the subflow name, so `main` keeps its colour across runs.
-- **Themes:** dark (default) and light, defined as CSS variables; contrast meets WCAG AA.
+- **Themes:** dark (default) and light, defined as CSS variables; contrast meets WCAG AA. The toggle sets `data-theme` on `<html>`. The choice is saved in localStorage, which is read before the first paint and wins at startup, and copied to the `settings` store, which restores it only when localStorage is empty (`app/theme.ts`). A toggle made before the database opens is therefore kept, and later written to the store.
 - **Type:** system UI font for text, monospace for values, variable names and timestamps.
 - **Density toggle:** comfortable (40 px rows) and compact (28 px rows).
 
@@ -406,7 +410,7 @@ If parse and derive exceed budget on real logs, the fallback is moving stages 3�
 | --- | --- | --- |
 | Unit | Vitest | File-name parsing, tick arithmetic, JSON-in-CSV parsing, truncation flag, effect summary, block depth, variable index |
 | Fixture | Vitest + sanitized CSVs | Small run, 10k-row run, failed run, nested blocks, CJK paths, malformed JSON, missing columns, BOM |
-| End to end | Playwright on built HTML via `file://` | Drop file → overview → filter → drawer → export; history persists across reload; zero network calls |
+| End to end | Playwright on built HTML via `file://` | Drop file → overview → filter → drawer → export; history persists across reload; zero network calls. From M4, `npm run test:e2e` runs `tests/e2e/` against `vite preview` of the built file (`playwright.config.ts`); M8 adds the `file://` run |
 | Manual | Locked-down laptop and VDI | Opening from download, IndexedDB availability, storage banner |
 
 ## Risks and open questions
