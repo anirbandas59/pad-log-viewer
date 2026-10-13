@@ -2,7 +2,7 @@
 // Acceptance: notes survive reload; the exported CSV re-imports cleanly.
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
-import { syntheticRun, toCsv } from '../unit/helpers/syntheticLog.ts'
+import { param, row as csvRow, syntheticRun, toCsv } from '../unit/helpers/syntheticLog.ts'
 import { FAILED, REAL, cards, drop, fixture, openApp, openRun, storedSetting } from './helpers.ts'
 
 // 200 rows: Output "Result" writes var<i % 50> (so var7 at rows 7, 57, 107, 157) and
@@ -166,6 +166,55 @@ test.describe('export filtered CSV', () => {
     await drop(page, [{ name: file.suggestedFilename(), text }])
     await expect(page.getByTestId('notice')).toContainText('already in history')
     await expect(cards(page)).toHaveCount(2)
+  })
+})
+
+// One variable written in subflows with short, long and very long names.
+const LONG_SUBFLOW = 'Create or Empty Folder For Screenshots'
+const HUGE_SUBFLOW = 'Very long subflow name '.repeat(6).trim()
+const SUBFLOW_VARS = {
+  name: 'Subflow_Vars-708192a3-b4c5-4d6e-8f70-8192a3b4c5d6-20261013T200000Z.csv',
+  text: toCsv(
+    [
+      ['1', 'main'],
+      ['2', LONG_SUBFLOW],
+      ['3', HUGE_SUBFLOW],
+    ].map(([i, subflow]) =>
+      csvRow({
+        'Log index': i!,
+        Subflow: subflow!,
+        Outputs: JSON.stringify({ V: param('Value', `D:/Data/Screens/run${i}`, 'txt_Folder') }),
+      }),
+    ),
+  ),
+}
+
+test.describe('variables history columns', () => {
+  test.use({ viewport: { width: 1366, height: 900 } })
+
+  test('show subflow names in full while the row has room, and cut only the longest', async ({
+    page,
+  }) => {
+    await drop(page, [SUBFLOW_VARS])
+    await openRun(page, 'Subflow_Vars')
+    await tab(page, 'Variables').click()
+    await page
+      .getByTestId('variable-list')
+      .getByRole('button', { name: /^txt_Folder\b/ })
+      .click()
+    const items = page.getByTestId('variable-history').getByTestId('assignment')
+    await expect(items).toHaveCount(3)
+    const cut = (title: string) =>
+      items
+        .locator(`[title="${title}"]`)
+        .first()
+        .evaluate((el) => el.scrollWidth > el.clientWidth)
+    expect(await cut('main')).toBe(false)
+    expect(await cut(LONG_SUBFLOW)).toBe(false)
+    // A name wider than its cap still ends in "…", with the full name on hover.
+    expect(await cut(HUGE_SUBFLOW)).toBe(true)
+    // Values are short, so they are not cut either.
+    expect(await cut('D:/Data/Screens/run2')).toBe(false)
   })
 })
 

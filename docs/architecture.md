@@ -88,7 +88,6 @@ pad-log-viewer/
 ├─ .github/workflows/
 │  ├─ ci.yml               # lint, unit, e2e, bundle-size check on every PR
 │  └─ release.yml          # builds the single HTML and attaches it to a release
-├─ public/                 # favicon only (inlined at build)
 ├─ scripts/
 │  └─ sanitize-log.ts      # turns a real log into a safe test fixture
 ├─ src/
@@ -337,7 +336,7 @@ As built (M7):
 | Time | Visible | Relative to run start, `+mm:ss.fff`; hover shows absolute timestamp |
 | Duration | Visible | Bar-in-cell scaled to the slowest action; sub-ms shown as `<1 ms` or µs |
 | Subflow | Visible | Colour chip |
-| Action | Visible | Module icon + Action display name, indented by block depth |
+| Action | Visible | Action display name, indented by block depth (a module icon is not in v1) |
 | Effect | Visible | e.g. `txt_ApiPayload ← "{ 'FilePath': …"` |
 | Status | Visible | Icon + colour |
 | Message | Visible | Log message, truncated with tooltip |
@@ -349,7 +348,7 @@ As built (M7):
 
 As built (M6):
 
-- Rows are virtualized with TanStack Virtual at fixed heights (table rows 40 px, or 28 px compact, from M7; 88 px cards), so nothing is measured while scrolling. The grid (`role="grid"`) holds a sticky header row; `aria-rowcount` counts it with the rows shown, the header is row 1 and data rows follow, and `aria-activedescendant` names the selected row while it is rendered (M7); columns come from `LOG_COLUMNS` and keep their grid tracks, and the table scrolls sideways inside its own box when the columns are wider than it. Time is `formatOffset` (`+mm:ss.fff`, `+h:mm:ss.fff` past an hour) with the exported timestamp as a tooltip; the Duration bar is scaled to the run's slowest action. The module icon in the Action column is not built yet.
+- Rows are virtualized with TanStack Virtual at fixed heights (table rows 40 px, or 28 px compact, from M7; 88 px cards), so nothing is measured while scrolling. The grid (`role="grid"`) holds a sticky header row; `aria-rowcount` counts it with the rows shown, the header is row 1 and data rows follow, and `aria-activedescendant` names the selected row while it is rendered (M7); columns come from `LOG_COLUMNS` and keep their grid tracks, and the table scrolls sideways inside its own box when the columns are wider than it. Cell text never spills into the next column: each cell clips, and long text (a subflow name, a status) ends in an ellipsis with the full text on hover. Subflow is 12 rem and Action `minmax(10rem, 2fr)` (since v1.0.1; 9 rem and 12 rem before). Time is `formatOffset` (`+mm:ss.fff`, `+h:mm:ss.fff` past an hour) with the exported timestamp as a tooltip; the Duration bar is scaled to the run's slowest action. The module icon in the Action column is not built yet.
 - Filtering is `filterRows` in core: search terms are split on whitespace and all must occur in the row's `searchText`; facets OR within a facet and AND across facets; Errors only keeps `isFailure` rows; Hide noise drops `Variables.SetVariable`/`Assign` and `Conditionals.If`/`Else`/`ElseIf` (`isNoise`). Status chips use `rowStatusKind`: Failed (`isFailure`), Warning (Log level contains "warn"), Succeeded, Unknown. Subflow and module chips are checkbox lists behind "Subflows" and "Modules" buttons, with row counts. Search is debounced 150 ms. Each filter change is timed from the store update to the table's commit as the `pad:filter` performance measure (budget < 100 ms).
 - The count reads "N of M rows"; the active-filter count is the search (1), each chosen facet value and each toggle. "Clear filters" also clears the search box.
 - Column visibility is saved to the `settings` store under `logColumns` (best effort, read at start-up with `readColumnVisibility`); the Action column cannot be hidden.

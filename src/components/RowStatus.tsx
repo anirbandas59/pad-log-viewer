@@ -12,9 +12,11 @@ const ROW_STATUS: Record<RowStatusKind, { className: string; Icon: typeof Circle
 export function RowStatus({ kind, label }: { kind: RowStatusKind; label?: string }) {
   const { className, Icon } = ROW_STATUS[kind]
   return (
-    <span className={`inline-flex min-w-0 items-center gap-1 ${className}`}>
+    <span className={`inline-flex max-w-full min-w-0 items-center gap-1 ${className}`}>
       <Icon aria-hidden size={14} className="shrink-0" />
-      <span className="truncate">{label || kind}</span>
+      <span className="truncate" title={label || kind}>
+        {label || kind}
+      </span>
     </span>
   )
 }

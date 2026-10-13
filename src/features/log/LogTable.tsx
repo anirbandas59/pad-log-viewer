@@ -174,7 +174,7 @@ export function LogTable({
                       <RowCard row={row} mark={marks.get(row.logIndex)} />
                     ) : (
                       columns.map((c) => (
-                        <span key={c.id} role="gridcell" className="min-w-0">
+                        <span key={c.id} role="gridcell" className="min-w-0 overflow-hidden">
                           <Cell
                             id={c.id}
                             row={row}
@@ -208,7 +208,7 @@ function RowCard({ row, mark }: { row: LogRow; mark?: RowMark }) {
         <span className="min-w-0 flex-1 truncate font-medium" title={row.actionDisplay}>
           {row.actionDisplay}
         </span>
-        <span className="shrink-0 text-xs">
+        <span className="max-w-[50%] min-w-0 shrink-0 text-xs">
           <RowStatus kind={rowStatusKind(row)} label={row.status} />
         </span>
       </div>

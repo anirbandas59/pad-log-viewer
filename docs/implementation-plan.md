@@ -42,7 +42,7 @@ Agents only ever push to `claude/*` (cloud session) or `feature/*` branches; `de
 | `claude/<task>-<id>` | One milestone each; the branch the cloud session is assigned (cloud sessions can push only to it). The PR title `feat(m<N>): …` identifies the milestone | Cloud developer session |
 | `feature/m<N>-<slug>` | One milestone each when built in a local session, e.g. `feature/m1-csv-core`; slugs in the Milestones table | Local developer session |
 
-Both `main` and `dev` are protected on GitHub: PR required, CI must pass, no force-push. A hook also blocks agents from pushing to them, so the rule holds even if protection is misconfigured.
+Branch protection is not available for this private repo on its GitHub plan, so nothing on GitHub blocks a merge. Instead every PR shows CI (`check`, `e2e`) and a `review-gate` check that is green only when the reviewer approved the exact head commit; the maintainer merges only on green. A hook blocks agents from pushing to `main` or `dev` or force-pushing.
 
 **PR lifecycle (GitHub labels):**
 

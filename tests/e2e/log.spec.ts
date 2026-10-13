@@ -257,6 +257,65 @@ test.describe('keyboard', () => {
   })
 })
 
+// Real subflow names are often longer than their column; they must clip, not overlap.
+const LONG_NAMES = {
+  name: 'Long_Names-6f708192-a3b4-4c5d-8e6f-708192a3b4c5-20261013T170000Z.csv',
+  text: toCsv([
+    csvRow({ 'Log index': '1', Subflow: 'Download Email Attachments From Shared Mailbox' }),
+    csvRow({ 'Log index': '2', Subflow: 'Email PreCheck and Retrieval' }),
+    csvRow({
+      'Log index': '3',
+      Subflow: 'Email PreCheck and Retrieval',
+      Status: 'Succeeded with warnings after retrying',
+    }),
+  ]),
+}
+
+/** Cells whose content paints past their own right edge, as "row/column" labels. */
+function overflowingCells(page: Page) {
+  return page.getByTestId('log-table').evaluate((table) => {
+    const bad: string[] = []
+    for (const cell of table.querySelectorAll<HTMLElement>('[data-log-index] > *')) {
+      const edge = cell.getBoundingClientRect().right
+      for (const el of cell.querySelectorAll('*')) {
+        if (el.getBoundingClientRect().right > edge + 1) {
+          bad.push(
+            `${cell.parentElement!.dataset.logIndex}/${[...cell.parentElement!.children].indexOf(cell)}`,
+          )
+          break
+        }
+      }
+    }
+    return bad
+  })
+}
+
+for (const width of [1366, 375]) {
+  test.describe(`long cell text at ${width} px`, () => {
+    test.use({ viewport: { width, height: width < 768 ? 812 : 900 } })
+
+    test('never paints into the next column', async ({ page }) => {
+      await openLog(page, LONG_NAMES, 'Long_Names')
+      await expect(row(page, 3)).toBeVisible()
+      expect(await overflowingCells(page)).toEqual([])
+      // The full name stays available on hover.
+      await expect(
+        row(page, 1).locator('[title="Download Email Attachments From Shared Mailbox"]').first(),
+      ).toBeAttached()
+      const status = row(page, 3).locator('[title="Succeeded with warnings after retrying"]')
+      await expect(status).toBeAttached()
+      if (width < 768) {
+        // On a card a long status is capped, so the action name keeps its room.
+        const [statusBox, cardBox] = await Promise.all([
+          status.boundingBox(),
+          row(page, 3).boundingBox(),
+        ])
+        expect(statusBox!.width).toBeLessThanOrEqual(cardBox!.width / 2 + 1)
+      }
+    })
+  })
+}
+
 test.describe('column picker', () => {
   test('shows and hides columns, and remembers the choice', async ({ page }) => {
     await openLog(page, fixture(FAILED), 'Invoice_Processing_v2')

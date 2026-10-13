@@ -20,6 +20,12 @@ function TruncatedBadge() {
 function AssignmentHistory({ name, list }: { name: string; list: readonly Assignment[] }) {
   const jump = useStore((s) => s.jumpToRow)
   const scroller = useRef<HTMLDivElement>(null)
+  // Rows are positioned one by one, so they share a subflow width worked out from the
+  // longest name: names show in full unless they pass 40% of the row.
+  const subflowChars = useMemo(
+    () => list.reduce((longest, a) => Math.max(longest, a.subflow.length), 0),
+    [list],
+  )
   // The virtualizer is mutable by design; this component re-renders with it, unmemoized.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -61,7 +67,8 @@ function AssignmentHistory({ name, list }: { name: string; list: readonly Assign
                   #{a.logIndex}
                 </button>
                 <span
-                  className="hidden w-32 shrink-0 truncate text-muted sm:block"
+                  className="hidden shrink-0 truncate text-muted sm:block"
+                  style={{ width: `${subflowChars + 1}ch`, maxWidth: '40%' }}
                   title={a.subflow}
                 >
                   {a.subflow}
