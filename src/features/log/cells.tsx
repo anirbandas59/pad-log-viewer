@@ -1,10 +1,31 @@
+import { Bookmark, StickyNote } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { formatDuration, formatOffset } from '../../core/model/format.ts'
 import { rowStatusKind } from '../../core/derive/filter.ts'
 import { subflowColor } from '../../core/derive/overview.ts'
+import type { RowMark } from '../../core/derive/annotations.ts'
 import type { LogColumnId } from '../../core/derive/columns.ts'
 import type { LogRow } from '../../core/model/types.ts'
 import { RowStatus } from '../../components/index.ts'
+
+/** Bookmark and note markers; each carries a text alternative. */
+export function MarkIcons({ mark }: { mark?: RowMark }) {
+  if (!mark || (!mark.bookmarked && !mark.note)) return null
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5 text-accent">
+      {mark.bookmarked && (
+        <span data-mark="bookmark" title="Bookmarked" role="img" aria-label="Bookmarked">
+          <Bookmark aria-hidden size={12} fill="currentColor" />
+        </span>
+      )}
+      {mark.note && (
+        <span data-mark="note" title={mark.note} role="img" aria-label="Has a note">
+          <StickyNote aria-hidden size={12} />
+        </span>
+      )}
+    </span>
+  )
+}
 
 export function SubflowChip({ subflow }: { subflow: string }) {
   return (
@@ -45,14 +66,21 @@ export function Cell({
   id,
   row,
   maxDuration,
+  mark,
 }: {
   id: LogColumnId
   row: LogRow
   maxDuration: bigint
+  mark?: RowMark
 }): ReactNode {
   switch (id) {
     case 'logIndex':
-      return <span className="font-mono text-xs text-muted">#{row.logIndex}</span>
+      return (
+        <span className="inline-flex items-center gap-1">
+          <span className="font-mono text-xs text-muted">#{row.logIndex}</span>
+          <MarkIcons mark={mark} />
+        </span>
+      )
     case 'time':
       return (
         <span className="font-mono text-xs" title={row.startIso || undefined}>

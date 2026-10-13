@@ -1,4 +1,4 @@
-import { Columns3, ListFilter, Search } from 'lucide-react'
+import { Bookmark, Columns3, ListFilter, Rows3, Search } from 'lucide-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { useStore } from '../../app/store.ts'
 import { CheckRow, Popover } from '../../components/index.ts'
@@ -68,6 +68,8 @@ export function FilterBar({
   const clear = useStore((s) => s.clearLogFilters)
   const columns = useStore((s) => s.logColumns)
   const setColumn = useStore((s) => s.setColumnVisible)
+  const density = useStore((s) => s.logDensity)
+  const setDensity = useStore((s) => s.setLogDensity)
   const [text, setText] = useState(filters.text)
   const timer = useRef<number | undefined>(undefined)
   const active = activeFilterCount(filters)
@@ -157,6 +159,25 @@ export function FilterBar({
           className={`${toggle} ${pressed(filters.hideNoise)}`}
         >
           Hide noise
+        </button>
+        <button
+          type="button"
+          aria-pressed={filters.bookmarkedOnly}
+          onClick={() => setFilters({ bookmarkedOnly: !filters.bookmarkedOnly })}
+          className={`${toggle} gap-1.5 ${pressed(filters.bookmarkedOnly)}`}
+        >
+          <Bookmark aria-hidden size={14} />
+          Bookmarked
+        </button>
+        <button
+          type="button"
+          aria-pressed={density === 'compact'}
+          title="Compact (28 px) or comfortable (40 px) rows"
+          onClick={() => setDensity(density === 'compact' ? 'comfortable' : 'compact')}
+          className={`${toggle} gap-1.5 ${pressed(density === 'compact')}`}
+        >
+          <Rows3 aria-hidden size={14} />
+          Compact rows
         </button>
         <Popover label="Columns" icon={<Columns3 aria-hidden size={16} />} align="right">
           <fieldset>

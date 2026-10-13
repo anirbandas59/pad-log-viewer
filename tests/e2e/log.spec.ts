@@ -72,7 +72,10 @@ test.beforeEach(async ({ page }) => {
 test.describe('virtualized table', () => {
   test('scrolls 10,000 rows without blank rows', async ({ page }) => {
     await openLog(page, BIG, 'Big_Run')
-    await expect(page.getByTestId('log-table')).toHaveAttribute('aria-rowcount', '10000')
+    // 10,000 data rows plus the header row.
+    await expect(page.getByTestId('log-table')).toHaveAttribute('aria-rowcount', '10001')
+    await expect(page.locator('[data-log-header]')).toHaveAttribute('aria-rowindex', '1')
+    await expect(row(page, 1)).toHaveAttribute('aria-rowindex', '2')
     const list = scroller(page)
     // Fewer DOM rows than data rows: the table is virtualized.
     expect(await list.locator('[data-log-index]').count()).toBeLessThan(200)
@@ -225,6 +228,9 @@ test.describe('keyboard', () => {
     await expect(row(page, 3)).toHaveAttribute('aria-selected', 'true')
     await page.keyboard.press('ArrowUp')
     await expect(row(page, 2)).toHaveAttribute('aria-selected', 'true')
+    // Assistive tech is told which row is active.
+    const active = await page.getByTestId('log-table').getAttribute('aria-activedescendant')
+    expect(await row(page, 2).getAttribute('id')).toBe(active)
     await page.keyboard.press('Enter')
     await expect(drawer(page)).toContainText('#2')
     await page.keyboard.press('Escape')
