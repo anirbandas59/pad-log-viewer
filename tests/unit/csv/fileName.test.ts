@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseFileName } from '../../../src/core/csv/fileName.ts'
+import { isSameExport, isSameRun, parseFileName } from '../../../src/core/csv/fileName.ts'
 
 const GUID = '0b5e2f6a-1c2d-4e3f-8a9b-0c1d2e3f4a5b'
 
@@ -53,5 +53,48 @@ describe('parseFileName', () => {
     expect(parseFileName('Flow_zb5e2f6a-1c2d-4e3f-8a9b-0c1d2e3f4a5b_1.csv').matched).toBe(false)
     expect(parseFileName(`Flow_${GUID}.csv`).matched).toBe(false)
     expect(parseFileName(`${GUID}_1.csv`).matched).toBe(false)
+  })
+})
+
+// Real portal exports use hyphens: <flow>-<run guid>-<export timestamp>.csv.
+describe('parseFileName with the portal export format', () => {
+  it('splits a hyphen-separated name and keeps underscores in the flow name', () => {
+    expect(parseFileName(`Invoice_Run_Main-${GUID}-20261012T113808Z.csv`)).toEqual({
+      fileName: `Invoice_Run_Main-${GUID}-20261012T113808Z.csv`,
+      flowName: 'Invoice_Run_Main',
+      runId: GUID,
+      exportedAt: '20261012T113808Z',
+      matched: true,
+    })
+  })
+
+  it('keeps hyphens in the flow name and anchors on the last GUID', () => {
+    const info = parseFileName(`My-Flow-v2-${GUID}-20261012T113808Z.csv`)
+    expect(info.flowName).toBe('My-Flow-v2')
+    expect(info.runId).toBe(GUID)
+    expect(info.exportedAt).toBe('20261012T113808Z')
+  })
+})
+
+describe('export identity', () => {
+  const a = parseFileName(`Flow-${GUID}-20261012T113808Z.csv`)
+  const sameExport = parseFileName(`Flow-${GUID.toUpperCase()}-20261012T113808Z.csv`)
+  const reExport = parseFileName(`Flow-${GUID}-20261013T080000Z.csv`)
+  const otherRun = parseFileName(`Flow-1b5e2f6a-1c2d-4e3f-8a9b-0c1d2e3f4a5b-20261012T113808Z.csv`)
+
+  it('treats the same run GUID and export timestamp as the same export', () => {
+    expect(isSameExport(a, sameExport)).toBe(true)
+    expect(isSameExport(a, reExport)).toBe(false)
+  })
+
+  it('treats the same run GUID with another timestamp as a re-export of the same run', () => {
+    expect(isSameRun(a, reExport)).toBe(true)
+    expect(isSameRun(a, otherRun)).toBe(false)
+  })
+
+  it('never matches names without a run GUID', () => {
+    const plain = parseFileName('export.csv')
+    expect(isSameRun(plain, plain)).toBe(false)
+    expect(isSameExport(plain, plain)).toBe(false)
   })
 })

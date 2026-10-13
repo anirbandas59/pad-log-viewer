@@ -430,3 +430,54 @@ describe('sanitizeLog', () => {
     expect(sanitize().csv).toBe(sanitize().csv)
   })
 })
+
+// Shape of a real portal export: BOM, sep= line, hyphen-separated file name.
+describe('sanitizeLog with the portal export format', () => {
+  const GUID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
+  const NAME = `Acme_PID_X99_Invoice_Main-${GUID}-20261012T113808Z.csv`
+  const exportCsv = () =>
+    '\uFEFFsep=,\r\n' +
+    toCsv([
+      row({
+        'Log index': '1',
+        Inputs: JSON.stringify({ P: param('Path', 'C:\\Users\\jdoe\\Inputs\\a.pdf') }),
+        Outputs: JSON.stringify({ P: param('Path', 'C:\\Users\\jdoe\\Outputs\\b.pdf') }),
+      }),
+      row({ 'Log index': '2', 'Log message': 'Moved Inputs\\a.pdf to Outputs\\b.pdf' }),
+    ])
+
+  it('keeps the BOM, the sep= line and every column', () => {
+    const out = sanitizeLog(exportCsv(), { fileName: NAME })
+    expect(out.csv.startsWith('\uFEFFsep=,\r\n')).toBe(true)
+    const after = parseCsv(out.csv)
+    if (!after.ok) throw new Error('parse failed')
+    expect(after.headers).toHaveLength(14)
+    expect(after.rows).toHaveLength(2)
+    expect(out.csv.toLowerCase()).not.toContain('jdoe')
+    expect(parsePayload(after.rows[0]!.Inputs!).malformed).toBe(false)
+  })
+
+  it('never learns column names as sensitive words', () => {
+    const out = sanitizeLog(exportCsv(), { fileName: NAME })
+    expect(out.residual).toEqual([])
+    const after = parseCsv(out.csv)
+    if (!after.ok) throw new Error('parse failed')
+    expect(after.headers).toContain('Inputs')
+    expect(after.headers).toContain('Outputs')
+  })
+
+  it('keeps the hyphen format and export timestamp, and pseudonymises the flow name', () => {
+    const out = sanitizeLog(exportCsv(), { fileName: NAME })
+    const info = parseFileName(out.fileName)
+    expect(info.matched).toBe(true)
+    expect(out.fileName).toMatch(/^[^_]+-[0-9a-f-]{36}-20261012T113808Z\.csv$/)
+    expect(info.runId).not.toBe(GUID)
+    expect(info.exportedAt).toBe('20261012T113808Z')
+    expect(info.flowName.toLowerCase()).not.toMatch(/acme|pid|x99|invoice/)
+  })
+
+  it('uses the given flow name instead', () => {
+    const out = sanitizeLog(exportCsv(), { fileName: NAME, flowName: 'Invoice_Main' })
+    expect(parseFileName(out.fileName).flowName).toBe('Invoice_Main')
+  })
+})

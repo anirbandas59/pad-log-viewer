@@ -170,19 +170,22 @@ Headers match ignoring case, spaces, underscores and a BOM (`Log index` = `LogIn
 
 ### File name
 
-Default format: `<flow-name>_<guid>_<export-timestamp>.csv`.
+Portal export format: `<flow-name>-<run-guid>-<export-timestamp>.csv`, e.g. `Invoice_Main-4c766126-8e2d-47cc-bc49-6f15ac34b689-20261012T113808Z.csv` (confirmed on a real export, 2026-10-13). The export timestamp is UTC, `yyyyMMdd'T'HHmmss'Z'`. The `_`-separated form `<flow-name>_<guid>_<export-timestamp>.csv` is also accepted.
 
-- Parse **from the right**: the last segment is the export timestamp, the one before it is the GUID, everything left of that is the flow name. Flow names can contain underscores.
+- Parse **from the right**: the last segment is the export timestamp, the one before it is the GUID, everything left of that is the flow name. Flow names can contain underscores and hyphens.
 - The GUID is matched with a strict 8-4-4-4-12 hex pattern; that anchors the split.
 - A file that does not match the pattern is still accepted; the flow name falls back to the file name and the run start falls back to the first row's Start time.
-- The GUID is the run id, unique per run, and is the run's key in history. The export timestamp only distinguishes exports: the same run exported twice shares a GUID, so dropping it again prompts "Replace or keep both".
+- The GUID is the run id, unique per run, and is the run's key in history. Duplicates are spotted by comparing the run GUID **and** the export timestamp (`isSameExport` / `isSameRun` in `fileName.ts`):
+  - same GUID and same export timestamp: the same export dropped again; it is already in history.
+  - same GUID, different export timestamp: the same run exported again; dropping it prompts "Replace or keep both".
 
 ### Parsing rules
 
+- **Separator line:** portal exports start with an Excel hint line `sep=,` (after the BOM), before the header row. It is skipped, and its delimiter is used; without it the delimiter is auto-detected.
 - **Quoting:** RFC 4180; embedded quotes are doubled (`""`).
 - **Encoding:** UTF-8 with optional BOM; non-ASCII (for example CJK file paths) must survive round-trip.
 - **Inputs/Outputs:** JSON inside a CSV field. Each parameter is `{ localizedName, value, variableName }`. Parse failure keeps the raw string and flags the row.
-- **Timestamps:** 7 fractional digits (.NET ticks). JavaScript `Date` keeps only milliseconds, so timestamps are parsed into BigInt ticks; durations under 1 ms stay accurate. Ticks count 100 ns since the Unix epoch, UTC. Accepted forms: ISO 8601 (`2026-10-01T09:15:30.1234567Z`, `T` or space, optional `Z`/`±hh:mm`, no zone = UTC) and US short (`10/1/2026 9:15:30.1234567 AM`); to be confirmed against real logs in real-log validation before v1 (deferred M1b).
+- **Timestamps:** 7 fractional digits (.NET ticks). JavaScript `Date` keeps only milliseconds, so timestamps are parsed into BigInt ticks; durations under 1 ms stay accurate. Ticks count 100 ns since the Unix epoch, UTC. Accepted forms: ISO 8601 (`2026-10-01T09:15:30.1234567Z`, `T` or space, optional `Z`/`±hh:mm`, no zone = UTC) and US short (`10/1/2026 9:15:30.1234567 AM`); to be confirmed against real logs in real-log validation before v1 (deferred M1b). One real export (2026-10-13) uses ISO 8601 with 7 fractional digits and `Z`.
 - **Bad cells:** a row with an unreadable Log index is skipped; an unreadable Start time falls back to End time (or run start), an unreadable End time to Start time. Both are reported as per-row issues rather than rejecting the file.
 - **Truncation:** PAD shortens long values in the log, ending them with `...`. Such values are flagged and labelled "truncated by PAD" in the UI.
 - **Ordering:** rows are sorted by Log index, never by Action index.
@@ -241,7 +244,7 @@ A dropped file passes through seven synchronous stages in `core/`, then the UI r
 5. **Derive (per row)**
    1. Duration and offset from run start.
    2. Effect summary: for actions that write a variable, `variable ← value` (value cut to 80 characters); for conditionals, `Condition = value`; otherwise the first input.
-   3. Block depth: +1 after a block-opening action (If, Loop, For each, Loop condition), −1 at the matching End. Opening and closing action names are a configurable list, to be confirmed against real logs in real-log validation before v1 (deferred M1b).
+   3. Block depth: +1 after a block-opening action (If, Loop, For each, Loop condition), −1 at the matching End. Opening and closing action names are a configurable list, to be confirmed against real logs in real-log validation before v1 (deferred M1b). A real 1,235-row export (2026-10-13) logged 154 `FlowControl.End` rows against about 320 possible openers (`Conditionals.If` 155, `Loops.Foreach` 57, `FlowControl.Block` 49, `Loops.Loop` 24, `System.IfProcessAction` 18, `File.IfFileAction` 11, `Folder.IfFolderExistsAction` 4, `Conditionals.Switch` 2), plus mid-block `Conditionals.Else` / `Conditionals.Case`, `Loops.Break` / `Continue` and `FlowControl.GoTo` / `Label`. A plain +1/−1 by action name therefore drifts: depth is best-effort and resets at each subflow boundary.
    4. Failure flag from Status and Log level.
 6. **Index (per run)**
    1. Variable index: variable name → ordered list of assignments (`logIndex`, value).
@@ -409,7 +412,7 @@ The biggest risks are environmental (what a locked-down browser allows), not tec
 **Open questions**
 
 - [ ] Should History group runs by flow name, or stay a single list sorted by date?
-- [ ] What is the exact export-timestamp format in the file name? (real-log validation before v1)
+- [x] What is the exact export-timestamp format in the file name? `yyyyMMdd'T'HHmmss'Z'`, UTC, in `<flow>-<guid>-<timestamp>.csv` (real export, 2026-10-13).
 - [ ] Which action names open and close blocks in the CSV (If, Else, Loop, For each, End)? (real-log validation before v1)
 - [ ] Do reviewers use Edge, Chrome or both on target machines?
 
