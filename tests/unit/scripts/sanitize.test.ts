@@ -481,3 +481,153 @@ describe('sanitizeLog with the portal export format', () => {
     expect(parseFileName(out.fileName).flowName).toBe('Invoice_Main')
   })
 })
+
+// Follow-ups from the #13 review: the flow name and the export-timestamp part of the file name.
+describe('sanitizeLog file-name parts', () => {
+  const GUID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
+  const body = () =>
+    toCsv([
+      row({
+        'Log index': '1',
+        'Log message': 'Running Acme_PID_X99_Invoice_Main for the night batch',
+        Inputs: JSON.stringify({ F: param('Flow', 'Acme_PID_X99_Invoice_Main') }),
+      }),
+    ])
+
+  it('removes the original flow name from the log body too', () => {
+    for (const flowName of [undefined, 'Invoice_Main']) {
+      const out = sanitizeLog(body(), {
+        fileName: `Acme_PID_X99_Invoice_Main-${GUID}-20261012T113808Z.csv`,
+        flowName,
+      })
+      expect(out.csv.toLowerCase()).not.toContain('acme_pid_x99_invoice_main')
+      expect(out.residual).toEqual([])
+    }
+  })
+
+  it('keeps the export timestamp only when it has the portal shape', () => {
+    const kept = sanitizeLog(body(), { fileName: `Flow-${GUID}-20261012T113808Z.csv` })
+    expect(kept.fileName.endsWith('-20261012T113808Z.csv')).toBe(true)
+    const odd = sanitizeLog(body(), { fileName: `Flow_${GUID}_ClientCorp.csv` })
+    expect(odd.fileName.toLowerCase()).not.toContain('clientcorp')
+    expect(parseFileName(odd.fileName).matched).toBe(true)
+  })
+})
+
+// Leaks found by reviewing the first real fixture (2026-10-13).
+describe('sanitizeLog rules from the first real export', () => {
+  const sanitizeRows = (rows: Parameters<typeof row>[0][]) =>
+    sanitizeLog(toCsv(rows.map((r) => row(r))), { fileName: 'x.csv' })
+
+  it('removes e-mail display names, here and elsewhere in the log', () => {
+    const out = sanitizeRows([
+      {
+        'Log index': '1',
+        Inputs: JSON.stringify({
+          From: param('Value', '"Das, Anirban SOMIBM-SOM-IBM" <adas@corp.example.com>'),
+          To: param('Value', 'Jane Mallory <jane@client.com>'),
+        }),
+      },
+      { 'Log index': '2', 'Log message': 'Approved by Anirban for Mallory (SOMIBM-SOM-IBM)' },
+    ])
+    const lower = out.csv.toLowerCase()
+    for (const s of ['anirban', 'somibm', 'mallory', 'adas', 'jane']) {
+      expect(lower, s).not.toContain(s)
+    }
+    expect(out.residual).toEqual([])
+  })
+
+  it('removes values read from environment variables, such as the machine name', () => {
+    const out = sanitizeRows([
+      {
+        'Log index': '1',
+        Outputs: JSON.stringify({
+          value: param('Environment variable value', 'AENNW04006PAD12', 'txt_ResourceName'),
+        }),
+      },
+      {
+        'Log index': '2',
+        Inputs: JSON.stringify({ text: param('Text to trim', 'AENNW04006PAD12') }),
+      },
+    ])
+    expect(out.csv.toLowerCase()).not.toContain('aennw04006pad12')
+    expect(out.residual).toEqual([])
+  })
+
+  it('replaces long base64 and hex blobs, keeping the truncation marker', () => {
+    const invoice = Buffer.from(
+      JSON.stringify({ invoiceList: [{ seller: 'Zhejiang Acme Trading Co', amount: 1234.5 }] }),
+    ).toString('base64')
+    const hex = 'c80690330a383aaaf799f13cd3e7f5c4d1922326'
+    const outlookId =
+      'AAMkADA4MjhlZTQyLTUzOGQtNDg2My1iNWJiLTA0NGVlNGNiZDA4YgBGAAAAAADws8Ej3k0qR5ySiqrnZbXI'
+    const out = sanitizeRows([
+      {
+        'Log index': '1',
+        Outputs: JSON.stringify({
+          result: param('Result', `{"returnCode":0,"data":"${invoice} ...`),
+          hash: param('Value', hex),
+          id: param('Value', outlookId),
+        }),
+      },
+    ])
+    for (const blob of [invoice, hex, outlookId]) {
+      expect(out.csv).not.toContain(blob.slice(0, 24))
+    }
+    const after = parseCsv(out.csv)
+    if (!after.ok) throw new Error('parse failed')
+    const result = parsePayload(after.rows[0]!.Outputs!).params[0]!
+    expect(result.value).toMatch(/"data":"blob\d+ \.\.\.$/)
+    expect(result.truncated).toBe(true)
+  })
+
+  it('replaces shorter blob prefixes that PAD truncated before its ... marker', () => {
+    const out = sanitizeRows([
+      {
+        'Log index': '1',
+        Outputs: JSON.stringify({
+          a: param('Value', 'eyJpbnZvaWNlTGlzdCI6W3siYnQiOiLmtZnms ...'),
+          b: param('Value', 'c80690330a383aaaf799f13cd...'),
+          c: param('Value', 'SortableDateTime ...'),
+        }),
+      },
+    ])
+    expect(out.csv).not.toContain('eyJpbnZvaWNlTGlzdCI6')
+    expect(out.csv).not.toContain('c80690330a383aaa')
+    expect(out.csv).toContain('SortableDateTime ...')
+  })
+
+  it('replaces long digit runs such as invoice codes and phone numbers, keeping dates', () => {
+    const out = sanitizeRows([
+      {
+        'Log index': '1',
+        'Log message':
+          'Saved 050003521107_55165308.pdf on 20261012 (export 20261012113808); call 13812345678',
+        Inputs: JSON.stringify({ f: param('File name', '050003521107_55165308.pdf') }),
+      },
+    ])
+    for (const d of ['050003521107', '55165308', '13812345678']) expect(out.csv).not.toContain(d)
+    expect(out.csv).toContain('20261012 (export 20261012113808)')
+    expect(out.csv).toMatch(/\d{12}_\d{8}\.pdf/)
+    const after = parseCsv(out.csv)
+    if (!after.ok) throw new Error('parse failed')
+    // The same original maps to the same replacement in every column.
+    const inMessage = /(\d{12}_\d{8})\.pdf/.exec(after.rows[0]!['Log message']!)![1]
+    expect(parsePayload(after.rows[0]!.Inputs!).params[0]!.value).toBe(`${inMessage}.pdf`)
+  })
+
+  it('does not treat ordinary long names or paths as blobs', () => {
+    const out = sanitizeRows([
+      {
+        'Log index': '1',
+        Inputs: JSON.stringify({
+          v: param('Value', 'AttachmentUnprocessedListForTheCurrentRunOfTheFlow'),
+          p: param('Path', 'C:\\Robot\\Inbox\\Reports2026\\October\\Daily\\Summary\\file1.xlsx'),
+        }),
+      },
+    ])
+    expect(out.csv).toContain('AttachmentUnprocessedListForTheCurrentRunOfTheFlow')
+    expect(out.csv).toMatch(/C:\\\\[^"]*\.xlsx/)
+    expect(out.csv).not.toMatch(/blob\d/)
+  })
+})

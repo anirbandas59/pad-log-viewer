@@ -70,6 +70,19 @@ const USER_DIR = new RegExp(String.raw`(?<!\w)[A-Za-z]:[\\/]Users[\\/](${SEG})`,
 // \\host\share or //host/share; a preceding colon means a URL scheme, handled by URL_RE.
 const UNC_HOST = new RegExp(String.raw`(?<![\\/:])(?:\\\\|//)(${SEG})[\\/]`, 'g')
 const ONEDRIVE_ORG = /OneDrive - ([^\\/:*?"<>|\r\n]+)/gi
+// E-mail display names: "Das, Anirban ORG" <a@b.c>, or Jane Doe <a@b.c> at the start of a value
+// or after a list separator (an unquoted name mid-sentence would learn ordinary words).
+const DISPLAY_NAME =
+  /(?:"([^"<>\r\n]{2,80})"|(?:^|[,;:]\s*)([A-Za-z][^"<>\r\n,;:]{1,60}?))\s*<\s*[\w.+-]+@[\w-]+(?:\.[\w-]+)+\s*>/g
+// Runs of 8+ digits: invoice codes and numbers, phone and account numbers. Dates written as
+// yyyyMMdd or yyyyMMddHHmmss are kept.
+const DIGITS = /(?<!\d)\d{8,}(?!\d)/g
+const DATE_DIGITS =
+  /^(?:19|20)\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?:[01]\d|2[0-3])?(?:[0-5]\d){0,2}$/
+// Long base64 or hex runs: encoded documents, OCR results, mailbox item ids, hashes, ciphertext.
+// PAD cuts long values and appends "...", so a run right before that marker counts from 20 chars.
+const BLOB =
+  /(?<![A-Za-z0-9+/=_-])(?:[A-Za-z0-9+/_-]{40,}={0,2}|[A-Za-z0-9+/_-]{20,39}(?= ?\.\.\.))(?![A-Za-z0-9+/=_-])/g
 const SHAREPOINT_SITE = /\/(?:sites|teams)\/([^/?#\s"'<>]+)/gi
 // Host labels that identify nobody; learning them would also rewrite our own pseudonyms.
 const HOST_NOISE = new Set(['www', 'com', 'net', 'org', 'co', 'example', 'test', 'localhost'])
@@ -155,6 +168,8 @@ class Pseudonyms {
     email: 0,
     url: 0,
     account: 0,
+    blob: 0,
+    digits: 0,
     term: 0,
   }
   /** Lower-cased originals that must not survive. */
@@ -218,6 +233,9 @@ class Sanitizer {
     for (const m of text.matchAll(USER_DIR)) add(m[1])
     for (const m of text.matchAll(UNC_HOST)) add(m[1])
     for (const m of text.matchAll(ONEDRIVE_ORG)) add(m[1]?.trim())
+    for (const m of text.matchAll(DISPLAY_NAME)) {
+      for (const word of (m[1] ?? m[2] ?? '').split(/[\s,]+/)) add(word)
+    }
     for (const m of text.matchAll(EMAIL)) {
       const [local, domain = ''] = m[0].split('@')
       add(local)
@@ -275,7 +293,13 @@ class Sanitizer {
   text(input: string, escaped = false): string {
     const sep = escaped ? '\\\\' : '\\'
     const s = escapeRe(sep)
-    let out = input.replace(GUID, (g) => {
+    // Before GUIDs: replacements keep the length, so a GUID with an all-digit group stays a GUID.
+    let out = input.replace(DIGITS, (d) => {
+      if (DATE_DIGITS.test(d) && (d.length === 8 || d.length === 14)) return d
+      this.p.count('digits')
+      return this.p.get('digits', d, (n) => String(n).padStart(d.length, '0'))
+    })
+    out = out.replace(GUID, (g) => {
       this.p.count('guid')
       this.p.secrets.add(g.toLowerCase())
       return this.p.get('guid', g, fakeGuid)
@@ -305,6 +329,14 @@ class Sanitizer {
       pathRe,
       keepTrailingSpace((m) => this.path(m, sep)),
     )
+    out = out.replace(BLOB, (b) => {
+      // Needs letters and digits, and few slashes, so long names and joined paths are kept.
+      if (!/\d/.test(b) || !/[A-Za-z]/.test(b) || (b.match(/\//g)?.length ?? 0) > b.length / 10) {
+        return b
+      }
+      this.p.count('blob')
+      return this.p.get('blob', b, (n) => `blob${n}`)
+    })
     out = out.replace(ACCOUNT, (_m, _domain: string, user: string) => {
       this.p.count('account')
       return `DOMAIN${sep}` + this.p.get('account', user, (n) => `account${n}`)
@@ -380,12 +412,30 @@ export function sanitizeLog(csv: string, options: SanitizeOptions): SanitizeResu
   const nameInfo = parseFileName(options.fileName)
 
   const s = new Sanitizer(options.terms ?? [], new Set(header.map((h) => h.trim().toLowerCase())))
+  // The original flow name can appear in the body too (messages, Run flow inputs); remove it
+  // there as well, whether or not --flow renames the fixture.
+  if (nameInfo.matched && nameInfo.flowName.length >= 3) s.addTerm(nameInfo.flowName)
   // JSON cells are learned from their decoded strings so paths match the plain-text patterns.
   for (const r of rows) {
     r.forEach((cell, i) => {
       if (!jsonCols.has(i)) return s.learn(cell)
       try {
-        stringsOf(JSON.parse(cell)).forEach((x) => s.learn(x))
+        const value: unknown = JSON.parse(cell)
+        stringsOf(value).forEach((x) => s.learn(x))
+        // Values read from environment variables (machine and user names) are removed everywhere.
+        for (const prm of Object.values(value && typeof value === 'object' ? value : {})) {
+          const { localizedName, value: v } = (prm ?? {}) as {
+            localizedName?: unknown
+            value?: unknown
+          }
+          if (
+            localizedName === 'Environment variable value' &&
+            typeof v === 'string' &&
+            v.trim().length >= 3
+          ) {
+            s.addTerm(v)
+          }
+        }
       } catch {
         s.learn(cell.replace(/\\\\/g, '\\'))
       }
@@ -404,7 +454,11 @@ export function sanitizeLog(csv: string, options: SanitizeOptions): SanitizeResu
     const sep2 = base.charAt(nameInfo.flowName.length + 1 + 36)
     const flow = options.flowName ?? s.p.get('flow', nameInfo.flowName, (n) => `flow${n}`)
     const guid = s.text(nameInfo.runId!)
-    fileName = `${flow}${sep1}${guid}${sep2}${nameInfo.exportedAt!}.csv`
+    // Keep the export timestamp only in the portal shape; anything else may be free text.
+    const exported = /^\d{8}T\d{6}Z$/i.test(nameInfo.exportedAt!)
+      ? nameInfo.exportedAt!
+      : s.p.get('export', nameInfo.exportedAt!, (n) => `export${n}`)
+    fileName = `${flow}${sep1}${guid}${sep2}${exported}.csv`
   } else {
     fileName = (options.flowName ?? s.text(options.fileName.replace(/\.csv$/i, ''))) + '.csv'
   }
