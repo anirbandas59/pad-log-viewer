@@ -174,7 +174,7 @@ export function LogTable({
                       <RowCard row={row} mark={marks.get(row.logIndex)} />
                     ) : (
                       columns.map((c) => (
-                        <span key={c.id} role="gridcell" className="min-w-0">
+                        <span key={c.id} role="gridcell" className="min-w-0 overflow-hidden">
                           <Cell
                             id={c.id}
                             row={row}
