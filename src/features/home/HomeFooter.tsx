@@ -31,6 +31,9 @@ export function HomeFooter() {
       <p className="flex flex-1 items-center gap-2 text-muted">
         <HardDrive aria-hidden size={16} className="shrink-0" />
         <span>{[usage, persistence].filter(Boolean).join(' · ')}</span>
+        <span data-testid="app-version" className="font-mono text-xs">
+          v{__APP_VERSION__}
+        </span>
       </p>
       <div className="flex flex-wrap gap-2">
         <Button disabled={!db || runs.length === 0} onClick={() => void exportAll()}>

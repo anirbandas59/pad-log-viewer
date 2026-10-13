@@ -398,11 +398,13 @@ CI builds the single HTML file on every tagged release; reviewers download it an
 
 **Release workflow:**
 
-1. Merge to `main` runs `ci.yml`: lint, type-check, unit tests, build, Playwright e2e against `dist/pad-log-viewer.html` opened via `file://`, bundle-size check.
+1. Merge to `main` runs `ci.yml`: lint, type-check, unit tests, build, Playwright e2e against `dist/pad-log-viewer.html` opened via `file://`, bundle-size check. As built (M8): `playwright.config.ts` runs every browser test twice, as project `preview` (`vite preview`, http) and project `file` (`file://…/dist/`), so the existing `e2e` job covers `file://` without a workflow change.
 2. A version tag (`v1.2.0`) runs `release.yml`: builds `pad-log-viewer-v1.2.0.html`, attaches it to the GitHub release with a changelog.
 3. The maintainer uploads the same file to the team's SharePoint or Teams channel.
 
 **Reviewer workflow:** download the HTML once → save it in a stable folder → double-click, or bookmark it in Edge. The app shows its version in the footer and a "What's new" note after an upgrade.
+
+As built (M8): the version (`package.json`, injected at build time as `__APP_VERSION__`) shows in the Home footer; "What's new" is a README section, not an in-app note, in v1. The reviewer guide is in the README and tells reviewers to save every version as `pad-log-viewer.html` in the same folder, since stored history follows the file's location.
 
 **Upgrade safety:** IndexedDB data is keyed to the page's origin. For `file://` pages that origin can depend on the file path \[to verify on target Edge\], so the reviewer guide tells users to replace the HTML in the same folder with the same file name, and to export the workspace before upgrading.
 
@@ -417,6 +419,9 @@ The app makes zero network requests, and real client logs never enter the reposi
 ### Security and data handling
 
 - **No network:** a Content-Security-Policy meta tag sets `default-src 'none'` with inline script and style allowed, so any accidental fetch fails. Playwright asserts zero network requests.
+  - As built (M8), stricter than that: the build (`shipHtml` in `vite.config.ts`, `scripts/lib/csp.ts`) puts the policy right after `<meta charset>` and allows the one inline script and the one stylesheet by SHA-256 hash, not `'unsafe-inline'`: `default-src 'none'; script-src 'sha256-…'; style-src 'unsafe-inline'; style-src-elem 'sha256-…'; style-src-attr 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'`. Style attributes stay allowed because React sets them; `style-src 'unsafe-inline'` is only the fallback for browsers without `style-src-elem`. No `'unsafe-eval'`. Downloads (CSV, workspace) are `blob:` links, which CSP does not govern.
+  - The build fails if the page would load anything from outside itself (any `src`/`href` other than `data:` or `#`) or writes any file besides the HTML; the icon is an inline `data:` SVG and `publicDir` is off.
+  - `tests/e2e/ship.spec.ts` opens `dist/pad-log-viewer.html` from `file://`, walks drop → overview → log → filter → drawer → note → export → Variables → Errors → reload, and asserts no request other than the file itself and `data:`/`blob:` URLs, no CSP violation and no console error; a second test shows `fetch` and an `<img>` to an https URL are blocked by the CSP before they are sent.
 - **No telemetry,** no analytics, no external fonts.
 - **Rendering:** all log values render as text, never as HTML, so a malicious value in a log cannot inject script.
 - **Repo hygiene:** the repo is private on github.com (anirbandas59/pad-log-viewer) and holds code and sanitized fixtures only. Raw logs contain client project ids, usernames and file paths; only output of `scripts/sanitize-log.ts` goes into `tests/fixtures/`. `npm run sanitize -- <log.csv> --terms "Client,Machine"` replaces GUIDs, paths, URLs, e-mails, `DOMAIN\account` names, user and host names learned from those, and the given terms with stable pseudonyms; it keeps timestamps, indexes, statuses, CSV shape and JSON validity, and refuses to write if a known secret survives. Free-text names it cannot recognise need `--terms`, so the output is always read before committing. A pre-commit check rejects CSVs outside that folder.
@@ -441,7 +446,7 @@ If parse and derive exceed budget on real logs, the fallback is moving stages 3�
 | --- | --- | --- |
 | Unit | Vitest | File-name parsing, tick arithmetic, JSON-in-CSV parsing, truncation flag, effect summary, block depth, variable index |
 | Fixture | Vitest + sanitized CSVs | Small run, 10k-row run, failed run, nested blocks, CJK paths, malformed JSON, missing columns, BOM |
-| End to end | Playwright on built HTML via `file://` | Drop file → overview → filter → drawer → export; history persists across reload; zero network calls. From M4, `npm run test:e2e` runs `tests/e2e/` against `vite preview` of the built file (`playwright.config.ts`); M8 adds the `file://` run |
+| End to end | Playwright on built HTML via `file://` | Drop file → overview → filter → drawer → export; history persists across reload; zero network calls. `npm run test:e2e` runs `tests/e2e/` against the built file twice: served by `vite preview` and, from M8, opened from `file://` (`playwright.config.ts` projects `preview` and `file`) |
 | Manual | Locked-down laptop and VDI | Opening from download, IndexedDB availability, storage banner |
 
 ## Risks and open questions

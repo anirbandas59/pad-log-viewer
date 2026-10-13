@@ -112,10 +112,18 @@ test.describe('quick changes to the same row', () => {
     await openTab(page, fixture(FAILED), 'Invoice_Processing_v2', 'Execution log')
     await row(page, 12).click()
     const bookmark = drawer(page).getByRole('button', { name: 'Bookmark' })
+    // Start bookmarked, so "off then on" is told apart from "nothing happened".
+    await bookmark.click()
+    await expect(bookmark).toHaveAttribute('aria-pressed', 'true')
     await bookmark.dblclick()
     await expect(drawer(page).getByTestId('note-status')).toHaveText('Saved')
-    await expect(bookmark).toHaveAttribute('aria-pressed', 'false')
-    await expect(row(page, 12).locator('[data-mark="bookmark"]')).toHaveCount(0)
+    await expect(bookmark).toHaveAttribute('aria-pressed', 'true')
+    await bookmark.dblclick()
+    await expect(drawer(page).getByTestId('note-status')).toHaveText('Saved')
+    await page.reload()
+    await openRun(page, 'Invoice_Processing_v2')
+    await tab(page, 'Execution log').click()
+    await expect(row(page, 12).locator('[data-mark="bookmark"]')).toBeVisible()
   })
 
   test('a note still waiting to be saved is kept when leaving the run', async ({ page }) => {

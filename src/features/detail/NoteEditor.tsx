@@ -21,14 +21,18 @@ export function NoteEditor({ logIndex, mark }: { logIndex: number; mark: RowMark
   const pending = useRef<string | null>(null)
   const timer = useRef<number | undefined>(undefined)
   const mounted = useRef(true)
+  // Only the newest save sets the status, so "Saved" never shows while a later save runs.
+  const latest = useRef(0)
   const id = useId()
 
   const save = (change: Partial<RowMark> | ((saved: RowMark) => Partial<RowMark>)) => {
     if (!runId) return
-    if (mounted.current) setStatus('Saving…')
+    const seq = ++latest.current
+    const show = (next: Status) => mounted.current && seq === latest.current && setStatus(next)
+    show('Saving…')
     setRowMark(runId, logIndex, change).then(
-      () => mounted.current && setStatus('Saved'),
-      () => mounted.current && setStatus('Not saved'),
+      () => show('Saved'),
+      () => show('Not saved'),
     )
   }
 
